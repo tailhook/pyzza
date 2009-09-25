@@ -16,11 +16,11 @@ class CPoolInfo(ABCStruct):
     def read(cls, stream):
         self = cls()
         self.int_count = stream.read_u30()
-        self.integer = [stream.read_s32() for i in range(self.int_count)]
+        self.integer = [stream.read_s32() for i in range(self.int_count-1)]
         self.uint_count = stream.read_u30()
-        self.uinteger = [stream.read_u32() for i in range(self.uint_count)]
+        self.uinteger = [stream.read_u32() for i in range(self.uint_count-1)]
         self.double_count = stream.read_u30()
-        self.double = [stream.read_d64() for i in range(self.double_count)]
+        self.double = [stream.read_d64() for i in range(self.double_count-1)]
         self.string_count = stream.read_u30()
         self.string = [stream.read(stream.read_u30()).decode('utf-8')
             for i in range(self.string_count-1)]
@@ -139,7 +139,8 @@ class TraitSlot(ABCStruct):
         self.slot_id = stream.read_u30()
         self.type_name = stream.read_u30()
         self.vindex = stream.read_u30()
-        self.vkind = stream.read_u8()
+        if self.vindex:
+            self.vkind = stream.read_u8()
         return self
 
 class TraitClass(ABCStruct):
@@ -187,6 +188,7 @@ class TraitsInfo(ABCStruct):
             self.metadata_count = stream.read_u30()
             self.metadata = [stream.read_u30()
                 for i in range(self.metadata_count)]
+        print(self)
         return self
 
 class TraitMethod(ABCStruct):
@@ -352,6 +354,7 @@ class ABCFile(ABCStruct):
         self.class_info = [ClassInfo.read(stream)
             for i in range(self.class_count)]
         self.script_count = stream.read_u30()
+        print(self)
         self.script_info = [ScriptInfo.read(stream)
             for i in range(self.script_count)]
         self.method_body_count = stream.read_u30()
@@ -375,6 +378,7 @@ class DoABC(object):
         self.real_body = ABCFile.read(abc)
 
     def print(self):
+        print(self.real_body)
         for i in range(self.real_body.method_body_count):
             body = self.real_body.method_body_info[i]
             head = self.real_body.method_info[body.method]

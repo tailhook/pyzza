@@ -64,6 +64,15 @@ class bytecodes(metaclass=gather_bytecodes):
         def _read(self, stream):
             self.byte_value = stream.read_u8()
 
+    class pushstring(Bytecode):
+        __slots__ = ('index',)
+        code = 0x2c
+        def _read(self, stream):
+            self.index = stream.read_u8()
+        def print(self, cpool, file=None):
+            str = cpool.string[self.index-1]
+            print('    pushstring', repr(str), file=file)
+
     class returnvalue(Bytecode):
         __slots__ = ()
         code = 0x48
@@ -120,6 +129,10 @@ class bytecodes(metaclass=gather_bytecodes):
         def _read(self, stream):
             self.index = stream.read_u30()
 
+    class pushtrue(Bytecode):
+        __slots__ = ()
+        code = 0x26
+
     class multiply(Bytecode):
         __slots__ = ()
         code = 0xa2
@@ -141,6 +154,16 @@ class bytecodes(metaclass=gather_bytecodes):
         code = 0x49
         def _read(self, stream):
             self.arg_count = stream.read_u30()
+
+    class constructprop(Bytecode):
+        __slots__ = ('index', 'arg_count')
+        code = 0x4a
+        def _read(self, stream):
+            self.index = stream.read_u30()
+            self.arg_count = stream.read_u30()
+        def print(self, cpool, file=None):
+            mn = cpool.multiname_info[self.index-1]
+            print('    constructprop', mn.repr(cpool), self.arg_count, file=file)
 
     class findpropstrict(Bytecode):
         __slots__ = ('index',)
@@ -199,6 +222,24 @@ class bytecodes(metaclass=gather_bytecodes):
         def print(self, cpool, file=None):
             mn = cpool.multiname_info[self.index-1]
             print('    getproperty', mn.repr(cpool), file=file)
+
+    class setproperty(Bytecode):
+        __slots__ = ('index',)
+        code = 0x61
+        def _read(self, stream):
+            self.index = stream.read_u30()
+        def print(self, cpool, file=None):
+            mn = cpool.multiname_info[self.index-1]
+            print('    setproperty', mn.repr(cpool), file=file)
+
+    class findproperty(Bytecode):
+        __slots__ = ('index',)
+        code = 0x5e
+        def _read(self, stream):
+            self.index = stream.read_u30()
+        def print(self, cpool, file=None):
+            mn = cpool.multiname_info[self.index-1]
+            print('    findproperty', mn.repr(cpool), file=file)
 
     class newfunction(Bytecode):
         __slots__ = ('index',)
