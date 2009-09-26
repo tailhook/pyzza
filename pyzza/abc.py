@@ -62,7 +62,7 @@ class NamespaceInfo(ABCStruct):
         return self
 
     def repr(self, cpool):
-        return '<NS{:d}:{:s}>'.format(self.kind, cpool.string[self.name-1])
+        return '<NS{:x}:{:s}>'.format(self.kind, cpool.string[self.name-1])
 
 class NamespaceSetInfo(ABCStruct):
 
@@ -288,7 +288,7 @@ class MultinameInfo(ABCStruct):
         return self
 
     def repr(self, cpool):
-        val = '<MN:'
+        val = '<MN{:x}:'.format(self.kind)
         if hasattr(self, 'name'):
             val += cpool.string[self.name-1]
         val += ':'

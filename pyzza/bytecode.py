@@ -241,6 +241,26 @@ class bytecodes(metaclass=gather_bytecodes):
             mn = cpool.multiname_info[self.index-1]
             print('    findproperty', mn.repr(cpool), file=file)
 
+    class callproperty(Bytecode):
+        __slots__ = ('index', 'arg_count')
+        code = 0x46
+        def _read(self, stream):
+            self.index = stream.read_u30()
+            self.arg_count = stream.read_u30()
+        def print(self, cpool, file=None):
+            mn = cpool.multiname_info[self.index-1]
+            print('    callproperty', mn.repr(cpool), self.arg_count, file=file)
+
+    class callpropvoid(Bytecode):
+        __slots__ = ('index', 'arg_count')
+        code = 0x4f
+        def _read(self, stream):
+            self.index = stream.read_u30()
+            self.arg_count = stream.read_u30()
+        def print(self, cpool, file=None):
+            mn = cpool.multiname_info[self.index-1]
+            print('    callpropvoid', mn.repr(cpool), self.arg_count, file=file)
+
     class newfunction(Bytecode):
         __slots__ = ('index',)
         code = 0x40
@@ -250,6 +270,18 @@ class bytecodes(metaclass=gather_bytecodes):
     class not_(Bytecode):
         __slots__ = ()
         code = 0x96
+
+    class newobject(Bytecode):
+        __slots__ = ('arg_count',)
+        code = 0x55
+        def _read(self, stream):
+            self.arg_count = stream.read_u30()
+
+    class dxns(Bytecode):
+        __slots__ = ('index',)
+        code = 0x06
+        def _read(self, stream):
+            self.index = stream.read_u30()
 
 class Parser(object):
 
