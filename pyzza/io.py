@@ -13,7 +13,7 @@ class ABCStream(object):
         bytes = self._stream.read(3)
         res = bytes[0] | (bytes[1] << 8) | (bytes[2] << 16)
         if res > (1 << 23):
-            res = -(res & ((1 << 23) -1))
+            res = -((~res)&((1 << 23)-1))
         return res
 
     def read_u16(self):

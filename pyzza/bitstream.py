@@ -44,6 +44,14 @@ class BitStream(object):
             self._bitoffset = 0
         return Bytes(self._stream.read(count))
 
+    def readstring(self):
+        c = self._stream.read(1)
+        res = bytearray()
+        while c and c != b'\x00':
+            res.extend(c)
+            c = self._stream.read(1)
+        return res.decode('utf-8')
+
     def readbits(self, count):
         if self._buf:
             if self._bitoffset + count >= 8:
@@ -53,7 +61,7 @@ class BitStream(object):
                 self._bitoffset = 0
             else:
                 val = ((1 << count)-1) & (self._buf[0] >> (8
-                    - self._bitoffset + count))
+                    - self._bitoffset - count))
                 self._bitoffset += count
                 return val
         else:

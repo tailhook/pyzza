@@ -2,6 +2,7 @@ import pprint
 import struct
 
 from . import bytecode
+from .tags import Tag, TAG_DoABC
 from .io import ABCStream
 
 class ABCStruct(object):
@@ -188,7 +189,6 @@ class TraitsInfo(ABCStruct):
             self.metadata_count = stream.read_u30()
             self.metadata = [stream.read_u30()
                 for i in range(self.metadata_count)]
-        print(self)
         return self
 
 class TraitMethod(ABCStruct):
@@ -278,10 +278,10 @@ class MultinameInfo(ABCStruct):
             self.name = stream.read_u30()
         elif self.kind in (self.CONSTANT_RTQNameL, self.CONSTANT_RTQNameLA):
             pass
-        elif self.kind in (self.CONSTANT_Multiname, self.CONSTANT_Multiname):
+        elif self.kind in (self.CONSTANT_Multiname, self.CONSTANT_MultinameA):
             self.name = stream.read_u30()
             self.ns_set = stream.read_u30()
-        elif self.kind in (self.CONSTANT_MultinameL, self.CONSTANT_MultinameL):
+        elif self.kind in (self.CONSTANT_MultinameL, self.CONSTANT_MultinameLA):
             self.ns_set = stream.read_u30()
         else:
             raise NotImplementedError(self.kind)
@@ -354,7 +354,6 @@ class ABCFile(ABCStruct):
         self.class_info = [ClassInfo.read(stream)
             for i in range(self.class_count)]
         self.script_count = stream.read_u30()
-        print(self)
         self.script_info = [ScriptInfo.read(stream)
             for i in range(self.script_count)]
         self.method_body_count = stream.read_u30()
@@ -364,10 +363,15 @@ class ABCFile(ABCStruct):
         return self
 
 
-class DoABC(object):
+class DoABC(Tag):
+    code = TAG_DoABC
 
-    def readbody(self, file):
-        self.data = file.read(self.length)
+    def _read(self, stream):
+        super()._read(stream)
+        self.parse_body()
+        self.decode()
+
+    def parse_body(self):
         self.flags = struct.unpack('<L', self.data[:4])[0]
         idx = self.data.index(b'\x00', 4)
         self.name = self.data[4:idx].decode('utf-8')
