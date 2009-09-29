@@ -682,7 +682,6 @@ class Parser(object):
             except IndexError:
                 break #no more characters
             code = bytecodes[code].read(self._stream)
-            code.raw_print()
             yield code
 
 def parse(code):

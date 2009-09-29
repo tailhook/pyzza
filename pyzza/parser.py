@@ -122,7 +122,7 @@ def parsers():
     empty = BLine(Empty())
     block = BLine(open_stmt) & Block(statement[1:]) > BlockStmt
     statement += Or(block, single, empty)
-    file_parser = statement[:].file_parser(LineAwareConfiguration(
+    file_parser = (statement[:] & Eof()).file_parser(LineAwareConfiguration(
         block_policy=4, block_start=0,
         monitors=[RecordDeepest()],
         ))
