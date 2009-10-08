@@ -15,16 +15,35 @@ class Mul(Node): pass
 class Per(Node): pass
 class Pow(Node): pass
 
+class Super(Node): pass
 class String(Node): pass
-class GetItem(Node): pass
-class GetAttr(Node): pass
+class _GetItem(Node): pass #trailer
+class GetItem(Node): pass #actual node
+class _GetAttr(Node): pass #trailer
+class GetAttr(Node): pass #actual node
 class Subscript(Node): pass
-class Call(Node): pass
+class _Call(Node): pass #trailer
+class Call(Node): pass #actual node
+class CallAttr(Node): pass #actual node
 
 def subscript(lst):
     if len(lst) == 1:
         return lst[0]
-    return Subscript(*lst)
+    it = iter(lst)
+    prev = next(it)
+    for nex in it:
+        if isinstance(nex, _Call):
+            if isinstance(prev, GetAttr):
+                prev = CallAttr(prev[0], prev[1][0], nex[0])
+            else:
+                prev = Call(prev, nex[0])
+        elif isinstance(nex, _GetItem):
+            prev = GetItem(prev, nex)
+        elif isinstance(nex, _GetAttr):
+            prev = GetAttr(prev, nex)
+        else:
+            raise TypeError(nex)
+    return prev
 
 class Lt(Node): pass
 class Le(Node): pass
@@ -44,12 +63,11 @@ class FromImport(Node): pass
 
 class DotName(Node): pass
 
-class BlockStmt(Node): pass
 class Class(Node): pass
 class Def(Node): pass
 
 def parsers():
-    symbol = Token(r'[\+\-\*\(\):/%=<>\.,\[\]]')
+    symbol = Token(r'[\+\-\*\(\):/%=<>\.,\[\]@]')
     ident = Token('[a-zA-Z_][a-zA-Z_0-9]*')
 
     def mkstring(quote):
@@ -65,11 +83,11 @@ def parsers():
     parens = ~symbol('(') & Extend(group3) & ~symbol(')')
     string = (mkstring('"') | mkstring("'")) > String
     group0, group05, expr = Delayed(), Delayed(), Delayed()
-    getitem = ~symbol('[') & Extend(expr) & ~symbol(']') > GetItem
-    getattr = ~symbol('.') & varname > GetAttr
+    getitem = ~symbol('[') & Extend(expr) & ~symbol(']') > _GetItem
+    getattr = ~symbol('.') & varname > _GetAttr
     lvalue = group0 & (getitem | getattr)[:] > subscript
-    args = expr & (~symbol(',') & expr)[:] > list
-    call = ~symbol('(') & Extend(args[:1]) & ~symbol(')') > Call
+    args = expr & (~symbol(',') & expr)[:]
+    call = ~symbol('(') & Extend(args[:1] > list) & ~symbol(')') > _Call
     group0 += parens | number | string | varname
     group05 += group0 & (getitem | getattr | call)[:] > subscript
 
@@ -96,35 +114,40 @@ def parsers():
 
     dotname = varname & (~symbol('.') & varname)[:] > DotName
 
+    BLine = ContinuedBLineFactory(r'\\')
+    statement = Delayed()
     colon = ~symbol(':')
-    if_stmt = ~ident('if') & expr & colon > If
-    for_stmt = ~ident('for') & lvalue & ~ident('in') & expr & colon > For
+    body = Block(statement[1:]) > 'body'
+    if_stmt = BLine(~ident('if') & expr & colon) & body > If
+    for_stmt = BLine(~ident('for') & lvalue
+        & ~ident('in') & expr & colon) & body > For
     bases = Delayed()
-    bases += varname & symbol(',') & bases | varname  > list
+    bases += varname & ~symbol(',') & bases | varname > 'bases'
     _bases = ~symbol('(') & bases & ~symbol(')')
-    class_stmt = ~ident('class') & varname & _bases[:1] & colon > Class
+    class_stmt = BLine(~symbol('@') & varname & call > 'decorator')[:]\
+        & BLine(~ident('class') & (varname > 'name')
+        & _bases[:1] & colon) & body > Class
     argdef = varname & (~symbol(',') & varname)[:] > list
     _argdef = ~symbol('(') & args[:] & ~symbol(')')
-    def_stmt = ~ident('def') & varname & _argdef & colon > Def
-    open_stmt = if_stmt | for_stmt | class_stmt | def_stmt
+    def_stmt = BLine(~ident('def') & (varname > 'name')
+        & _argdef & colon) & body > Def
+    block = if_stmt | for_stmt | class_stmt | def_stmt
 
     pass_stmt = ~ident('pass')
     print_stmt = ~ident('print') & expr > Print
     return_stmt = ~ident('return') & expr > Return
     assert_stmt = ~ident('assert') & expr > Assert
+    super_stmt = ~ident('super') & ~call & ~symbol('.') & varname & call > Super
     assign_stmt = lvalue & ~symbol('=') & expr > Assign
     from_stmt = ~ident('from') & dotname & ~ident('import') & varname > FromImport
 
-    BLine = ContinuedBLineFactory(r'\\')
-    statement = Delayed()
-    single = BLine(expr | from_stmt | class_stmt | pass_stmt
-        | print_stmt | assert_stmt | return_stmt | Trace(assign_stmt))
+    single = BLine(super_stmt | expr | from_stmt | class_stmt | pass_stmt
+        | print_stmt | assert_stmt | return_stmt | assign_stmt)
     empty = BLine(Empty())
-    block = BLine(open_stmt) & Block(statement[1:]) > BlockStmt
     statement += Or(block, single, empty)
     file_parser = (statement[:] & Eof()).file_parser(LineAwareConfiguration(
         block_policy=4, block_start=0,
-        monitors=[RecordDeepest()],
+        #~ monitors=[RecordDeepest()],
         ))
     return file_parser
 

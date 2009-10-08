@@ -2,14 +2,21 @@ from .io import ABCStream
 
 def gather_bytecodes(name, bases, dic):
     res = {}
-    for v in dic.values():
+    glob = globals()
+    for (k, v) in dic.items():
         if hasattr(v, 'code'):
             res[v.code] = v
+            glob[k] = v
     return res
 
 class Bytecode(object):
     __slots__ = ()
     code = None
+
+    def __init__(self, *args):
+        if args:
+            for (i, name) in enumerate(self.__slots__):
+                setattr(self, name, args[i])
 
     @classmethod
     def read(cls, stream):
@@ -19,6 +26,10 @@ class Bytecode(object):
 
     def _read(self, stream):
         pass # no operands
+
+    def __repr__(self):
+        return '<{}{}>'.format(self.__class__.__name__,
+            ''.join(' '+str(getattr(self, a)) for a in self.__slots__))
 
     def raw_print(self, file=None):
         print('    ' + self.__class__.__name__,

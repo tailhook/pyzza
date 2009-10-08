@@ -2,14 +2,21 @@ import zlib
 import struct
 from io import BytesIO
 from math import log, ceil
+from operator import methodcaller
 
-from . import bitstream
+from . import bitstream, tags
 
 class Rect(object):
     x_min = None
     x_max = None
     y_min = None
     y_max = None
+
+    def __init__(self, width=None, height=None):
+        self.x_min = 0
+        self.y_min = 0
+        self.x_max = width
+        self.y_max = height
 
     @classmethod
     def read(cls, bitstr):
@@ -51,6 +58,14 @@ class Header(object):
     frame_size = None
     frame_rate = None
     frame_count = None
+
+    def __init__(self, compressed=True, version=10, frame_size=(100,100),
+        frame_rate=(15<<8), frame_count=1):
+        self.compressed = compressed
+        self.version = version
+        self.frame_size = Rect(*frame_size)
+        self.frame_rate = frame_rate
+        self.frame_count = frame_count
 
     @classmethod
     def read(cls, file):
@@ -107,26 +122,59 @@ class Header(object):
             "frames{{sz:{frame_size} rate:{frame_rate} cnt:{frame_count}}}>"\
             .format('1' if self.compressed else '0', **self.__dict__)
 
-def main():
-    global abc
-    from . import tags
-    import sys
-    with open(sys.argv[1]+'.swf', 'wb') as o:
-        with open(sys.argv[1], 'rb') as f:
-            h = Header.read(f)
-            tag = None
-            taglist = []
-            while not isinstance(tag, tags.End):
-                tag = tags.read(h.file)
-                taglist.append(tag)
-                print(tag)
-                if hasattr(tag, 'print'):
-                    tag.print()
+def get_options():
+    import optparse
+    op = optparse.OptionParser()
+    op.add_option('-p', '--print-tags',
+        help='Print tags while decoding SWF file',
+        dest="print_tags", default=False, action="store_true")
+    op.add_option('-d', '--disassemble',
+        help='Print bytecode disassemble while decoding ABC',
+        dest="print_dis", default=False, action="store_true")
+    op.add_option('-O', '--optimize',
+        help='Optimize bytecode',
+        dest="optimize", default=False, action="store_true")
+    op.add_option('-s', '--strip',
+        help='Strip unneeded tags (assumes that you have code-only file without'
+            ' graphic or other content)',
+        dest="strip", default=False, action="store_true")
+    op.add_option('-o', '--output', metavar="FILE",
+        help='Write output swf into FILE',
+        dest="output", default=None, type="string")
+    return op
 
-            content = b''.join(t.blob() for t in taglist
-                if t.code in (tags.TAG_DoABC, tags.TAG_SymbolClass,
-                        tags.TAG_ShowFrame, tags.TAG_FileAttributes))
-            h.write_swf(o, content)
+def main():
+    global options
+    op = get_options()
+    options, args = op.parse_args()
+
+    if len(args) != 1:
+        op.error("Exacly one argument expected")
+
+    with open(args[0], 'rb') as f:
+        h = Header.read(f)
+        tag = None
+        taglist = []
+        while not isinstance(tag, tags.End):
+            tag = tags.read(h.file)
+            taglist.append(tag)
+            if options.print_tags:
+                print(tag)
+            if options.print_dis and hasattr(tag, 'print'):
+                tag.print()
+
+    if options.output:
+        if options.strip:
+            good_tags = (
+                tags.DoABC,
+                tags.SymbolClass,
+                tags.ShowFrame,
+                tags.FileAttributes,
+                )
+            taglist = (tag for tag in taglist if isinstance(tag, good_tags))
+        content = b''.join(map(methodcaller('blob'), taglist))
+        with open(options.output, 'wb') as outfile:
+            h.write_swf(outfile, content)
 
 if __name__ == '__main__':
 

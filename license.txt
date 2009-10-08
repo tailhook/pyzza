@@ -1,0 +1,4 @@
+Here will be text of MIT License, with the following copyright:
+
+  (c) 2009 Paul Colomiets
+

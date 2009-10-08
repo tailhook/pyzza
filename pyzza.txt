@@ -1,0 +1,55 @@
+Pyzza programming language
+==========================
+
+Overview
+--------
+
+Pyzza is a language with a syntax similar to Python. But it's definetly
+not Python.
+
+The aim of this language to run on ActionScript Virtual Machine (AVM), and to
+be easy to use scripting language for applications written in ActionScript.
+Pyzza syntax should be a subset of Python syntax so that you can run some
+pieces of Pyzza code in a python interpreter (e.g. for unittesting),
+because running Python interpreter (even with plenty of mock Flash
+classes) is much easier to automate. As you can see the aim is much different
+than one for Jython or IronPython, and is much less challenge. This
+simplification also allows us to make code running at native speed of AVM so
+that you can choose between pyzza and ActionScript based on convenience and not
+because speed reasons.
+
+Since it's pet-project I have no time to make complete description of the
+language so I'll give some highlight of differences between languages so you
+can start hacking and maybe some day we will setup a complete guide.
+
+Differences from Python
+-----------------------
+
+ * only ``from P.A.C.K.A.G.E import CLASSNAME`` form of import statement
+    currently supported
+ * ``import``s are compile-time ones
+ * decorators are also compile-time, only class decorator ``package`` is
+    currently supported
+ * ``del``s remove reference dynamically but removes name at compile time, it
+    can lead to subtle errors if using ``del`` inside conditional statement
+ * attributes defined in class-body are static attributes
+ * ``def``s inside classes are bound to class statically (mostly limitation of
+    ActionScript Bytecode/Virtual Machine)
+ * apart from that any code can be in class body, non ``del``eted local
+    variables will be static members
+
+Differences from ActionScript
+-----------------------------
+
+ * Your file structure is not limited you can create any class in any package
+    in any file
+ * No namespaces support. Everything is public (it's python property, but
+    maybe we will add support of namespaces throught decorators, if we'll find
+    a good reason for that, e.g. a good perfomance improvements)
+ * No E4X support, currently (looking forward on how to fix it to not become of
+    superset of python syntax)
+
+Current limitations
+-------------------
+
+ * Can only compile one file

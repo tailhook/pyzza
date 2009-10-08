@@ -57,11 +57,19 @@ class Tag(object):
 class End(Tag):
     code = TAG_End
 
+    def blob(self):
+        self.data = b''
+        return super().blob()
+
     def _read(self, stream):
         assert self.length == 0, self.length
 
 class SymbolClass(Tag):
     code = TAG_SymbolClass
+
+    def __init__(self, main_class=None):
+        if main_class is not None:
+            self.assoc = { 0: main_class }
 
     def _read(self, stream):
         self.number = stream.readbytes(2).int_le
@@ -71,16 +79,27 @@ class SymbolClass(Tag):
             self.assoc[k] = stream.readstring()
 
     def blob(self):
-        assert self.number == len(self.assoc), self.number
+        self.number = len(self.assoc)
         self.data = bytearray([self.number & 0xFF, self.number >> 8])
         for (k, v) in self.assoc.items():
             self.data.extend([k >> 8, k & 0xFF])
             self.data.extend(v.encode('utf-8'))
             self.data.append(0)
+        self.length = len(self.data)
         return super().blob()
 
 class FileAttributes(Tag):
     code = TAG_FileAttributes
+
+    def __init__(self):
+        self.r1 = 0
+        self.UseDirectBlit = False
+        self.UseGPU = True
+        self.HasMetadata = False
+        self.ActionScript3 = True
+        self.r2 = 0
+        self.UseNetwork = True
+        self.r3 = 0
 
     def _read(self, stream):
         self.r1 = stream.readbits(1)
@@ -107,6 +126,15 @@ class FileAttributes(Tag):
             (self.r3 >> 8) & 0xFF,
             (self.r3 >> 16) & 0xFF,
             ])
+        self.length = len(self.data)
+        return super().blob()
+
+class ShowFrame(Tag):
+    code = TAG_ShowFrame
+
+    def blob(self):
+        self.length = 0
+        self.data = b''
         return super().blob()
 
 from .abc import DoABC
