@@ -1,9 +1,17 @@
 import pprint
 import struct
 
-from . import bytecode
 from .tags import Tag, TAG_DoABC
 from .io import ABCStream
+
+class Undefined(object):
+    def __new__(cls):
+        global undefined
+        try:
+            return undefined
+        except NameError:
+            undefined = super().__new__(cls)
+            return undefined
 
 class ABCStruct(object):
     pass
@@ -85,12 +93,12 @@ class NamespaceSetInfo(ABCStruct):
     def read(cls, stream, cpool):
         self = cls()
         count = stream.read_u30()
-        self.ns = [cpool.namespace_info[stream.read_u30()]
+        self.ns = [cpool.namespace_info[stream.read_u30()-1]
             for i in range(count)]
         return self
 
-    def repr(self, cpool):
-        return '<Ns {}>'.format(','.join(self.ns))
+    def __repr__(self):
+        return '<NS {}>'.format(','.join(map(repr, self.ns)))
 
 class AnyType(object):
     __slots__ = ()
@@ -150,23 +158,23 @@ class OptionDetail(ABCStruct):
         val = stream.read_u30()
         kind = stream.read_u8()
         if kind == CONSTANT_Int:
-            self.value = cpool.integer[val]
+            self.value = cpool.integer[val-1]
         elif kind == CONSTANT_UInt:
-            self.value = cpool.uinteger[val]
+            self.value = cpool.uinteger[val-1]
         elif kind == CONSTANT_Double:
-            self.value = cpool.double[val]
+            self.value = cpool.double[val-1]
         elif kind == CONSTANT_Utf8:
-            self.value = cpool.string[val]
+            self.value = cpool.string[val-1]
         elif kind == CONSTANT_True:
-            assert not val
+            #~ assert not val, 'Value {} for CONSTANT_True'.format(val)
             self.value = True
         elif kind == CONSTANT_False:
-            assert not val
+            #~ assert not val, 'Value {} for CONSTANT_False'.format(val)
             self.value = False
         elif kind == CONSTANT_Null:
             self.value = None
         elif kind == CONSTANT_Undefined:
-            self.value = undefined
+            self.value = Undefined()
         else:
             self.value = cpool.namespace_info[val]
         return self
@@ -273,7 +281,7 @@ class MetadataInfo(ABCStruct):
 class MethodBodyInfo(ABCStruct):
 
     @classmethod
-    def read(cls, stream):
+    def read(cls, stream, index):
         self = cls()
         self.method = stream.read_u30()
         self.max_stack = stream.read_u30()
@@ -288,7 +296,8 @@ class MethodBodyInfo(ABCStruct):
         self.trait_count = stream.read_u30()
         self.traits_info = [TraitsInfo.read(stream)
             for i in range(self.trait_count)]
-        self.bytecode = bytecode.parse(self.code)
+        index.set_method(self)
+        self.bytecode = bytecode.parse(self.code, index)
         return self
 
 class ExceptionInfo(ABCStruct):
@@ -327,22 +336,34 @@ class QName(MultinameInfo):
     def _read(self, stream, cpool):
         self.namespace = cpool.namespace_info[stream.read_u30()-1]
         self.name = cpool.string[stream.read_u30()-1]
+    def __repr__(self):
+        return '<{} {}:{}>'.format(self.__class__.__name__,
+            self.namespace, self.name)
 class QNameA(QName): pass
 class RTQName(MultinameInfo):
     def _read(self, stream, cpool):
         self.name = cpool.string[stream.read_u30()-1]
+    def __repr__(self):
+        return '<{} {}>'.format(self.__class__.__name__, self.name)
 class RTQNameA(RTQName): pass
 class RTQNameL(MultinameInfo):
     def _read(self, stream, cpool): pass
+    def __repr__(self):
+        return '<RTQNameL>'
 class RTQNameLA(RTQNameL): pass
 class Multiname(MultinameInfo):
     def _read(self, stream, cpool):
         self.name = cpool.string[stream.read_u30()-1]
         self.namespace_set = cpool.ns_set_info[stream.read_u30()-1]
+    def __repr__(self):
+        return '<{} {}:{}>'.format(self.__class__.__name__,
+            self.namespace_set, self.name)
 class MultinameA(Multiname): pass
 class MultinameL(MultinameInfo):
     def _read(self, stream, cpool):
         self.namespace_set = cpool.ns_set_info[stream.read_u30()-1]
+    def __repr__(self):
+        return '<{} {}>'.format(self.__class__.__name__, self.namespace_set)
 class MultinameLA(Multiname): pass
 
 multiname_kinds = {
@@ -365,10 +386,10 @@ class InstanceInfo(ABCStruct):
     CONSTANT_ClassProtectedNs = 0x08
 
     @classmethod
-    def read(cls, stream):
+    def read(cls, stream, cpool):
         self = cls()
-        self.name = stream.read_u30()
-        self.super_name = stream.read_u30()
+        self.name = cpool.multiname_info[stream.read_u30()-1]
+        self.super_name = cpool.multiname_info[stream.read_u30()-1]
         self.flags = stream.read_u8()
         if self.flags & self.CONSTANT_ClassProtectedNs:
             self.protectedNs = stream.read_u30()
@@ -381,6 +402,9 @@ class InstanceInfo(ABCStruct):
             for i in range(self.trait_count)]
         return self
 
+    def __repr__(self):
+        return '<Class {}({})>'.format(self.name, self.super_name)
+
 class ClassInfo(ABCStruct):
 
     @classmethod
@@ -391,6 +415,48 @@ class ClassInfo(ABCStruct):
         self.trait = [TraitsInfo.read(stream)
             for i in range(self.trait_count)]
         return self
+
+class Index(object):
+    def __init__(self, data):
+        self.data = data
+
+    def get_string(self, index):
+        if index == 0:
+            return ""
+        return self.data.constant_pool.string[index-1]
+
+    def get_integer(self, index):
+        if index == 0:
+            raise NotImplementedError()
+        return self.data.constant_pool.integer[index-1]
+
+    def get_uinteger(self, index):
+        if index == 0:
+            raise NotImplementedError()
+        return self.data.constant_pool.uinteger[index-1]
+
+    def get_multiname(self, index):
+        if index == 0:
+            raise NotImplementedError()
+        return self.data.constant_pool.multiname_info[index-1]
+
+    def get_double(self, index):
+        if index == 0:
+            raise NotImplementedError()
+        return self.data.constant_pool.double[index-1]
+
+    def get_class(self, index):
+        return self.data.instance_info[index]
+
+    def get_method(self, index):
+        return self.data.method_info[index]
+
+    def set_method(self, method):
+        self._method = method
+
+    def get_exception_info(self, index):
+        return self._method.exception_info[index]
+
 
 class ABCFile(ABCStruct):
 
@@ -409,7 +475,7 @@ class ABCFile(ABCStruct):
         self.metadata_info = [MetadataInfo.read(stream)
             for i in range(metadata_count)]
         class_count = stream.read_u30()
-        self.instance_info = [InstanceInfo.read(stream)
+        self.instance_info = [InstanceInfo.read(stream, self.constant_pool)
             for i in range(class_count)]
         self.class_info = [ClassInfo.read(stream)
             for i in range(class_count)]
@@ -417,10 +483,14 @@ class ABCFile(ABCStruct):
         self.script_info = [ScriptInfo.read(stream)
             for i in range(script_count)]
         method_body_count = stream.read_u30()
-        self.method_body_info = [MethodBodyInfo.read(stream)
+        self.method_body_info = [MethodBodyInfo.read(stream, Index(self))
             for i in range(method_body_count)]
         assert not stream.read(1)
         return self
+
+    def write(self, stream):
+        self.stream.write_u16(self.minor_version)
+        self.stream.write_u16(self.major_version)
 
 
 class DoABC(Tag):
@@ -445,19 +515,15 @@ class DoABC(Tag):
         self.real_body = ABCFile.read(abc)
 
     def print(self):
-        from . import pretty
-        pretty.pprint(self.real_body)
-        for i in range(self.real_body.method_body_count):
-            body = self.real_body.method_body_info[i]
+        for body in self.real_body.method_body_info:
             head = self.real_body.method_info[body.method]
-            print("METHOD",
-                self.real_body.constant_pool.string[head.name-1],
-                "PARAMS", head.param_count)
+            print("METHOD", head.name, "PARAMS",
+                getattr(head, 'param_name', head.param_type))
             for i in body.bytecode:
                 i.print(self.real_body.constant_pool)
 
     def blob(self):
-        buf = BytesIO()
+        buf = ABCStream()
         buf.write(struct.pack('<L', self.flags))
         buf.write(self.name.encode('utf-8'))
         buf.write('\x00')
@@ -466,3 +532,4 @@ class DoABC(Tag):
         self.length = len(self.data)
         return super().blob()
 
+from . import bytecode

@@ -37,6 +37,8 @@ Differences from Python
     ActionScript Bytecode/Virtual Machine)
  * apart from that any code can be in class body, non ``del``eted local
     variables will be static members
+ * global functions like ``range()``, ``len()`` etc. are not functions, they are
+    reserved words. Also ``range()`` works only inside ``for`` statement.
 
 Differences from ActionScript
 -----------------------------

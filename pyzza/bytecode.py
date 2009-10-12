@@ -1,4 +1,11 @@
 from .io import ABCStream
+from . import io
+from .abc import (MultinameInfo, MethodInfo, ExceptionInfo,
+    InstanceInfo, NamespaceInfo)
+
+class Offset(int): pass
+class Register(int): pass
+class Slot(int): pass
 
 def gather_bytecodes(name, bases, dic):
     res = {}
@@ -9,9 +16,23 @@ def gather_bytecodes(name, bases, dic):
             glob[k] = v
     return res
 
-class Bytecode(object):
+class BytecodeMeta(type):
+    def __new__(cls, name, bases, dic):
+        if 'format' in dic:
+            dic['__slots__'] = tuple(a[0] for a in dic['format'])
+        elif '__slots__' not in dic:
+            dic['__slots__'] = ()
+        return super().__new__(cls, name, bases, dic)
+
+class Bytecode(object, metaclass=BytecodeMeta):
     __slots__ = ()
+    format = (
+        # (human-readable name, type, constantpool dict or None, value format),
+        #   value format is one of  io.u30, io.s24, io.u8
+        )
     code = None
+    stack_before = ()
+    stack_after = ()
 
     def __init__(self, *args):
         if args:
@@ -19,672 +40,841 @@ class Bytecode(object):
                 setattr(self, name, args[i])
 
     @classmethod
-    def read(cls, stream):
+    def read(cls, stream, index):
         res = cls()
-        res._read(stream)
+        res._read(stream, index)
         return res
 
-    def _read(self, stream):
-        pass # no operands
+    def _read(self, stream, index):
+        for (name, typ, idx, format) in self.format:
+            val = stream.read_formatted(format)
+            if idx is not None:
+                val = getattr(index, 'get_' + idx)(val)
+            if not isinstance(val, typ):
+                val = typ(val)
+            setattr(self, name, val)
 
     def __repr__(self):
         return '<{}{}>'.format(self.__class__.__name__,
-            ''.join(' '+str(getattr(self, a)) for a in self.__slots__))
+            ''.join(' '+repr(getattr(self, a)) for (a,_,_,_) in self.format))
 
-    def raw_print(self, file=None):
+    def print(self, file=None):
         print('    ' + self.__class__.__name__,
-            *(getattr(self, a) for a in self.__slots__))
+            *(repr(getattr(self, a)) for a in self.__slots__))
 
-    def print(self, constant_pool, file=None):
-        return self.raw_print(file=file) # by default
+class PropertyBytecode(Bytecode):
+    propertyattr = 'property'
+    def _stack_before(self):
+        val = getattr(self, propertyattr)
+        if isinstance(val, (Multiname, QName)):
+            return ('obj', 'namespace', 'name')
+        elif isinstance(val, RTQName):
+            return ('obj', 'namespace')
+        elif isinstance(val, MultinameL):
+            return ('obj', 'name')
+        elif isinstance(val, RTQNameL):
+            return ('obj',)
+        else:
+            raise NotImplementedError(val)
+    stack_before = property(_stack_before)
+
+class BinaryBytecode(Bytecode):
+    stack_before = ('value1', 'value2')
+    stack_after = ('value3',)
+
+class UnaryBytecode(Bytecode):
+    stack_before = ('value',)
+    stack_after = ('value',)
+
+class DebugBytecode(Bytecode):
+    pass
+
+class JumpBytecode(Bytecode):
+    format = (
+        ('offset', Offset, None, io.s24),
+        )
 
 class bytecodes(metaclass=gather_bytecodes):
 
-    class debugfile(Bytecode):
-        __slots__ = ('index',)
-        code = 0xf1
-        def _read(self, stream):
-            self.index = stream.read_u30()
-        def print(self, cpool, file=None):
-            print('    debugfile', cpool.string[self.index-1], file=file)
-
-    class debug(Bytecode):
-        __slots__ = ('debug_type', 'index', 'reg', 'extra')
-        code = 0xef
-        def _read(self, stream):
-            self.debug_type = stream.read_u8()
-            self.index = stream.read_u30()
-            self.reg = stream.read_u8()
-            self.extra = stream.read_u30()
-        def print(self, cpool, file=None):
-            if self.debug_type == 1:
-                print('    debug reg', cpool.string[self.index-1]
-                    + '=' + str(self.reg+1), self.extra, file=file)
-            else:
-                self.raw_print(file=file)
-
-    class debugline(Bytecode):
-        __slots__ = ('linenum',)
-        code = 0xf0
-        def _read(self, stream):
-            self.linenum = stream.read_u30()
-
-    class pushbyte(Bytecode):
-        __slots__ = ('value',)
-        code = 0x24
-        def _read(self, stream):
-            self.value = stream.read_u8()
-
-    class pushshort(Bytecode):
-        __slots__ = ('value',)
-        code = 0x25
-        def _read(self, stream):
-            self.value = stream.read_u30()
-
-    class pushint(Bytecode):
-        __slots__ = ('index',)
-        code = 0x2d
-        def _read(self, stream):
-            self.index = stream.read_u30()
-
-    class pushdouble(Bytecode):
-        __slots__ = ('index',)
-        code = 0x2f
-        def _read(self, stream):
-            self.index = stream.read_u30()
-
-    class pushstring(Bytecode):
-        __slots__ = ('index',)
-        code = 0x2c
-        def _read(self, stream):
-            self.index = stream.read_u30()
-        def print(self, cpool, file=None):
-            str = cpool.string[self.index-1]
-            print('    pushstring', repr(str), file=file)
-
-    class returnvalue(Bytecode):
-        __slots__ = ()
-        code = 0x48
-
-    class returnvoid(Bytecode):
-        __slots__ = ()
-        code = 0x47
-
-    class coerce_a(Bytecode):
-        __slots__ = ()
-        code = 0x82
-
-    class coerce_s(Bytecode):
-        __slots__ = ()
-        code = 0x85
-
-    class coerce(Bytecode):
-        __slots__ = ('index',)
-        code = 0x80
-        def _read(self, stream):
-            self.index = stream.read_u30()
-        def print(self, cpool, file=None):
-            mn = cpool.multiname_info[self.index-1]
-            print('    coerce', mn.repr(cpool), file=file)
-
-    class convert_s(Bytecode):
-        __slots__ = ()
-        code = 0x70
-
-    class convert_i(Bytecode):
-        __slots__ = ()
-        code = 0x73
-
-    class convert_u(Bytecode):
-        __slots__ = ()
-        code = 0x74
-
-    class convert_d(Bytecode):
-        __slots__ = ()
-        code = 0x75
-
-    class convert_b(Bytecode):
-        __slots__ = ()
-        code = 0x76
-
-    class convert_o(Bytecode):
-        __slots__ = ()
-        code = 0x77
-
-    class nextname(Bytecode):
-        __slots__ = ()
-        code = 0x1e
-
-    class istypelate(Bytecode):
-        __slots__ = ()
-        code = 0xb3
-
-    class equals(Bytecode):
-        __slots__ = ()
-        code = 0xab
-
-    class strictequals(Bytecode):
-        __slots__ = ()
-        code = 0xac
-
-    class lessthan(Bytecode):
-        __slots__ = ()
-        code = 0xad
-
-    class lessequals(Bytecode):
-        __slots__ = ()
-        code = 0xae
-
-    class greaterthan(Bytecode):
-        __slots__ = ()
-        code = 0xaf
-
-    class greaterequals(Bytecode):
-        __slots__ = ()
-        code = 0xb0
-
-    class dup(Bytecode):
-        __slots__ = ()
-        code = 0x2a
-
-    class kill(Bytecode):
-        __slots__ = ('index',)
-        code = 0x08
-        def _read(self, stream):
-            self.index = stream.read_u8()
-        def print(self, cpool, file=None):
-            print('    kill', self.index, file=file)
-
-    class setlocal_0(Bytecode):
-        __slots__ = ()
-        code = 0xd4
-
-    class setlocal_1(Bytecode):
-        __slots__ = ()
-        code = 0xd5
-
-    class setlocal_2(Bytecode):
-        __slots__ = ()
-        code = 0xd6
-
-    class setlocal_3(Bytecode):
-        __slots__ = ()
-        code = 0xd7
-
-    class setlocal(Bytecode):
-        __slots__ = ('index',)
-        code = 0x63
-        def _read(self, stream):
-            self.index = stream.read_u30()
-
-    class getlocal_0(Bytecode):
-        __slots__ = ()
-        code = 0xd0
-
-    class getlocal_1(Bytecode):
-        __slots__ = ()
-        code = 0xd1
-
-    class getlocal_2(Bytecode):
-        __slots__ = ()
-        code = 0xd2
-
-    class getlocal_3(Bytecode):
-        __slots__ = ()
-        code = 0xd3
-
-    class getlocal(Bytecode):
-        __slots__ = ('index',)
-        code = 0x62
-        def _read(self, stream):
-            self.index = stream.read_u30()
-
-    class pushfalse(Bytecode):
-        __slots__ = ()
-        code = 0x27
-
-    class pushtrue(Bytecode):
-        __slots__ = ()
-        code = 0x26
-
-    class pushundefined(Bytecode):
-        __slots__ = ()
-        code = 0x21
-
-    class pushnan(Bytecode):
-        __slots__ = ()
-        code = 0x28
-
-    class pop(Bytecode):
-        __slots__ = ()
-        code = 0x29
-
-    class newactivation(Bytecode):
-        __slots__ = ()
-        code = 0x57
-
-    class hasnext2(Bytecode):
-        __slots__ = ('object_reg', 'index_reg')
-        code = 0x32
-        def _read(self, stream):
-            self.object_reg = stream.read_u30()
-            self.index_reg = stream.read_u30()
-
-    class multiply(Bytecode):
-        __slots__ = ()
-        code = 0xa2
-
-    class divide(Bytecode):
-        __slots__ = ()
-        code = 0xa3
-
-    class negate(Bytecode):
-        __slots__ = ()
-        code = 0x90
-
-    class add(Bytecode):
-        __slots__ = ()
+    class add(BinaryBytecode):
         code = 0xa0
 
-    class subtract(Bytecode):
-        __slots__ = ()
-        code = 0xa1
+    class add_i(BinaryBytecode):
+        code = 0xc5
 
-    class rshift(Bytecode):
-        __slots__ = ()
-        code = 0xa6
+    class astype(UnaryBytecode):
+        format = (
+            ('type', MultinameInfo, 'multiname', io.u30),
+            )
+        code = 0x86
 
-    class bitnot(Bytecode):
-        __slots__ = ()
-        code = 0x97
+    class astypelate(Bytecode):
+        format = (
+            ('type', MultinameInfo, 'multiname', io.u30),
+            )
+        code = 0x87
+        stack_before = ('value', 'klass')
+        stack_after = ('value',)
 
-    class bitand(Bytecode):
-        __slots__ = ()
+    class bitand(BinaryBytecode):
         code = 0xa8
 
-    class bitor(Bytecode):
-        __slots__ = ()
+    class bitnot(UnaryBytecode):
+        code = 0x97
+
+    class bitor(BinaryBytecode):
         code = 0xa9
 
-    class bitxor(Bytecode):
-        __slots__ = ()
+    class bitxor(BinaryBytecode):
         code = 0xaa
 
-    class lshift(Bytecode):
-        __slots__ = ()
-        code = 0xa5
+    class call(Bytecode):
+        format = (
+            ('arg_count', int, None, io.u30),
+            )
+        code = 0x41
+        @property
+        def stack_before(self):
+            return ('function', 'receiver') + tuple('arg{}'.format(i)
+                for i in self.arg_count)
+        stack_after = ('value',)
 
-    class modulo(Bytecode):
-        __slots__ = ()
-        code = 0xa4
+    class callmethod(Bytecode):
+        format = (
+            ('method', MethodInfo, 'methods', io.u30),
+            ('arg_count', int, None, io.u30),
+            )
+        code = 0x43
+        @property
+        def stack_before(self):
+            return ('receiver',) + tuple('arg{}'.format(i)
+                for i in self.arg_count)
+        stack_after = ('value',)
 
-    class swap(Bytecode):
-        __slots__ = ()
-        code = 0x2b
+    class callproperty(PropertyBytecode):
+        format = (
+            ('property', MultinameInfo, 'multiname', io.u30),
+            ('arg_count', int, None, io.u30),
+            )
+        code = 0x46
+        propertyattr = 'method'
+        @property
+        def stack_before(self):
+            return super()._stack_before() + tuple('arg{}'.format(i)
+                for i in self.arg_count)
+        stack_after = ('value',)
 
-    class typeof(Bytecode):
-        __slots__ = ()
-        code = 0x95
+    class callproplex(PropertyBytecode):
+        format = (
+            ('property', MultinameInfo, 'multiname', io.u30),
+            ('arg_count', int, None, io.u30),
+            )
+        code = 0x4c
+        propertyattr = 'method'
+        @property
+        def stack_before(self):
+            return super()._stack_before() + tuple('arg{}'.format(i)
+                for i in self.arg_count)
+        stack_after = ('value',)
 
-    class in_(Bytecode):
-        __slots__ = ()
-        code = 0xb4
+    class callpropvoid(PropertyBytecode):
+        format = (
+            ('property', MultinameInfo, 'multiname', io.u30),
+            ('arg_count', int, None, io.u30),
+            )
+        code = 0x4f
+        propertyattr = 'method'
+        @property
+        def stack_before(self):
+            return super()._stack_before() + tuple('arg{}'.format(i)
+                for i in self.arg_count)
 
-    class increment(Bytecode):
-        __slots__ = ()
-        code = 0x91
+    class callstatic(Bytecode):
+        format = (
+            ('method', MethodInfo, 'method', io.u30),
+            ('arg_count', int, None, io.u30),
+            )
+        code = 0x44
+        @property
+        def stack_before(self):
+            return ('receiver',) + tuple('arg{}'.format(i)
+                for i in self.arg_count)
+        stack_after = ('value',)
 
-    class decrement(Bytecode):
-        __slots__ = ()
-        code = 0x93
+    class callsuper(PropertyBytecode):
+        format = (
+            ('property', MultinameInfo, 'multiname', io.u30),
+            ('arg_count', int, None, io.u30),
+            )
+        code = 0x45
+        propertyattr = 'method'
+        @property
+        def stack_before(self):
+            return super()._stack_before() + tuple('arg{}'.format(i)
+                for i in self.arg_count)
+        stack_after = ('value',)
 
-    class increment_i(Bytecode):
-        __slots__ = ()
-        code = 0xc0
+    class callsupervoid(PropertyBytecode):
+        format = (
+            ('property', MultinameInfo, 'multiname', io.u30),
+            ('arg_count', int, None, io.u30),
+            )
+        code = 0x4e
+        propertyattr = 'method'
+        @property
+        def stack_before(self):
+            return super()._stack_before() + tuple('arg{}'.format(i)
+                for i in self.arg_count)
 
-    class pushscope(Bytecode):
-        __slots__ = ()
-        code = 0x30
+    class checkfilter(UnaryBytecode):
+        code = 0x78
 
-    class popscope(Bytecode):
-        __slots__ = ()
-        code = 0x1d
+    class coerce(UnaryBytecode):
+        format = (
+            ('type', MultinameInfo, 'multiname', io.u30),
+            )
+        code = 0x80
 
-    class getglobalscope(Bytecode):
-        __slots__ = ()
-        code = 0x64
+    class coerce_a(UnaryBytecode):
+        code = 0x82
 
-    class nextvalue(Bytecode):
-        __slots__ = ()
-        code = 0x23
-
-    class throw(Bytecode):
-        __slots__ = ()
-        code = 0x3
+    class coerce_s(UnaryBytecode):
+        code = 0x85
 
     class construct(Bytecode):
-        __slots__ = ('arg_count',)
+        format = (
+            ('arg_count', int, None, io.u30),
+            )
         code = 0x42
-        def _read(self, stream):
-            self.arg_count = stream.read_u30()
+        @property
+        def stack_before(self):
+            return ('object',) + tuple('arg{}'.format(i)
+                for i in self.arg_count)
+        stack_after = ('value',)
+
+    class constructprop(PropertyBytecode):
+        format = (
+            ('property', MultinameInfo, 'multiname', io.u30),
+            ('arg_count', int, None, io.u30),
+            )
+        code = 0x4a
+        @property
+        def stack_before(self):
+            return super()._stack_before() + tuple('arg{}'.format(i)
+                for i in self.arg_count)
+        stack_after = ('value',)
 
     class constructsuper(Bytecode):
-        __slots__ = ('arg_count',)
+        format = (
+            ('arg_count', int, None, io.u30),
+            )
         code = 0x49
-        def _read(self, stream):
-            self.arg_count = stream.read_u30()
+        @property
+        def stack_before(self):
+            return ('object',) + tuple('arg{}'.format(i)
+                for i in self.arg_count)
+        stack_after = ('value',)
 
-    class constructprop(Bytecode):
-        __slots__ = ('index', 'arg_count')
-        code = 0x4a
-        def _read(self, stream):
-            self.index = stream.read_u30()
-            self.arg_count = stream.read_u30()
-        def print(self, cpool, file=None):
-            mn = cpool.multiname_info[self.index-1]
-            print('    constructprop', mn.repr(cpool), self.arg_count, file=file)
+    class convert_b(UnaryBytecode):
+        code = 0x76
 
-    class findpropstrict(Bytecode):
-        __slots__ = ('index',)
-        code = 0x5d
-        def _read(self, stream):
-            self.index = stream.read_u30()
-        def print(self, cpool, file=None):
-            mn = cpool.multiname_info[self.index-1]
-            print('    findpropstrict', mn.repr(cpool), file=file)
+    class convert_i(UnaryBytecode):
+        code = 0x73
 
-    class callproperty(Bytecode):
-        __slots__ = ('index', 'arg_count')
-        code = 0x4f
-        def _read(self, stream):
-            self.index = stream.read_u30()
-            self.arg_count = stream.read_u30()
-        def print(self, cpool, file=None):
-            mn = cpool.multiname_info[self.index-1]
-            print('    callproperty', mn.repr(cpool), self.arg_count, file=file)
+    class convert_d(UnaryBytecode):
+        code = 0x75
 
-    class getscopeobject(Bytecode):
-        __slots__ = ('index',)
-        code = 0x65
-        def _read(self, stream):
-            self.index = stream.read_u30()
+    class convert_o(UnaryBytecode):
+        code = 0x77
 
-    class getlex(Bytecode):
-        __slots__ = ('index',)
-        code = 0x60
-        def _read(self, stream):
-            self.index = stream.read_u30()
-        def print(self, cpool, file=None):
-            mn = cpool.multiname_info[self.index-1]
-            print('    getlex', mn.repr(cpool), file=file)
+    class convert_u(UnaryBytecode):
+        code = 0x74
 
-    class newclass(Bytecode):
-        __slots__ = ('index',)
-        code = 0x58
-        def _read(self, stream):
-            self.index = stream.read_u30()
+    class convert_s(UnaryBytecode):
+        code = 0x70
 
-    class getslot(Bytecode):
-        __slots__ = ('slotindex',)
-        code = 0x6c
-        def _read(self, stream):
-            self.slotindex = stream.read_u30()
+    class debug(DebugBytecode):
+        code = 0xef
+        format = (
+            ('debug_type', int, None, io.u8),
+            ('index', str, 'string', io.u30),
+            ('reg', int, None, io.u8),
+            ('extra', int, None, io.u30),
+            )
 
-    class setslot(Bytecode):
-        __slots__ = ('slotindex',)
-        code = 0x6d
-        def _read(self, stream):
-            self.slotindex = stream.read_u30()
+    class debugfile(DebugBytecode):
+        code = 0xf1
+        format = (
+            ('filename', str, 'string', io.u30),
+            )
 
-    class getsuper(Bytecode):
-        __slots__ = ('index',)
-        code = 0x04
-        def _read(self, stream):
-            self.index = stream.read_u30()
+    class debugline(DebugBytecode):
+        code = 0xf0
+        format = (
+            ('linenum', int, None, io.u30),
+            )
 
-    class setsuper(Bytecode):
-        __slots__ = ('index',)
-        code = 0x05
-        def _read(self, stream):
-            self.index = stream.read_u30()
+    class declocal(Bytecode):
+        code = 0x94
+        format = (
+            ('register', Register, None, io.u30),
+            )
 
-    class callsuper(Bytecode):
-        __slots__ = ('index', 'arg_count')
-        code = 0x45
-        def _read(self, stream):
-            self.index = stream.read_u30()
-            self.arg_count = stream.read_u30()
+    class declocal_i(Bytecode):
+        code = 0xc3
+        format = (
+            ('register', Register, None, io.u30),
+            )
 
-    class initproperty(Bytecode):
-        __slots__ = ('index',)
-        code = 0x68
-        def _read(self, stream):
-            self.index = stream.read_u30()
-        def print(self, cpool, file=None):
-            mn = cpool.multiname_info[self.index-1]
-            print('    initproperty', mn.repr(cpool), file=file)
+    class decrement(UnaryBytecode):
+        code = 0x93
 
-    class getproperty(Bytecode):
-        __slots__ = ('index',)
-        code = 0x66
-        def _read(self, stream):
-            self.index = stream.read_u30()
-        def print(self, cpool, file=None):
-            mn = cpool.multiname_info[self.index-1]
-            print('    getproperty', mn.repr(cpool), file=file)
+    class decrement_i(UnaryBytecode):
+        code = 0xc1
 
-    class setproperty(Bytecode):
-        __slots__ = ('index',)
-        code = 0x61
-        def _read(self, stream):
-            self.index = stream.read_u30()
-        def print(self, cpool, file=None):
-            mn = cpool.multiname_info[self.index-1]
-            print('    setproperty', mn.repr(cpool), file=file)
-
-    class deleteproperty(Bytecode):
-        __slots__ = ('index',)
+    class deleteproperty(PropertyBytecode):
         code = 0x6a
-        def _read(self, stream):
-            self.index = stream.read_u30()
-        def print(self, cpool, file=None):
-            mn = cpool.multiname_info[self.index-1]
-            print('    deleteproperty', mn.repr(cpool), file=file)
+        format = (
+            ('property', MultinameInfo, 'multiname', io.u30),
+            )
+        propertyattr = 'property'
+        stack_after = ('value',)
 
-    class findproperty(Bytecode):
-        __slots__ = ('index',)
-        code = 0x5e
-        def _read(self, stream):
-            self.index = stream.read_u30()
-        def print(self, cpool, file=None):
-            mn = cpool.multiname_info[self.index-1]
-            print('    findproperty', mn.repr(cpool), file=file)
+    class divide(BinaryBytecode):
+        code = 0xa3
 
-    class callproperty(Bytecode):
-        __slots__ = ('index', 'arg_count')
-        code = 0x46
-        def _read(self, stream):
-            self.index = stream.read_u30()
-            self.arg_count = stream.read_u30()
-        def print(self, cpool, file=None):
-            mn = cpool.multiname_info[self.index-1]
-            print('    callproperty', mn.repr(cpool), self.arg_count, file=file)
-
-    class callpropvoid(Bytecode):
-        __slots__ = ('index', 'arg_count')
-        code = 0x4f
-        def _read(self, stream):
-            self.index = stream.read_u30()
-            self.arg_count = stream.read_u30()
-        def print(self, cpool, file=None):
-            mn = cpool.multiname_info[self.index-1]
-            print('    callpropvoid', mn.repr(cpool), self.arg_count, file=file)
-
-    class newfunction(Bytecode):
-        __slots__ = ('index',)
-        code = 0x40
-        def _read(self, stream):
-            self.index = stream.read_u30()
-
-    class inclocal_i(Bytecode):
-        __slots__ = ('index',)
-        code = 0xc2
-        def _read(self, stream):
-            self.index = stream.read_u30()
-
-    class not_(Bytecode):
-        __slots__ = ()
-        code = 0x96
-
-    class pushnull(Bytecode):
-        __slots__ = ()
-        code = 0x20
-
-    class FAIL(Bytecode):
-        __slots__ = ()
-        code = 0xFF
-
-    class jump(Bytecode):
-        __slots__ = ('offset',)
-        code = 0x10
-        def _read(self, stream):
-            self.offset = stream.read_s24()
-
-    class lookupswitch(Bytecode):
-        __slots__ = ('default_offset', 'case_count', 'case_offsets')
-        code = 0x1b
-        def _read(self, stream):
-            self.default_offset = stream.read_s24()
-            self.case_count = stream.read_u30()
-            self.case_offsets = [stream.read_s24()
-                for i in range(self.case_count)]
-
-    class ifeq(Bytecode):
-        __slots__ = ('offset',)
-        code = 0x13
-        def _read(self, stream):
-            self.offset = stream.read_s24()
-
-    class iffalse(Bytecode):
-        __slots__ = ('offset',)
-        code = 0x12
-        def _read(self, stream):
-            self.offset = stream.read_s24()
-
-    class ifge(Bytecode):
-        __slots__ = ('offset',)
-        code = 0x18
-        def _read(self, stream):
-            self.offset = stream.read_s24()
-
-    class ifgt(Bytecode):
-        __slots__ = ('offset',)
-        code = 0x17
-        def _read(self, stream):
-            self.offset = stream.read_s24()
-
-    class ifle(Bytecode):
-        __slots__ = ('offset',)
-        code = 0x16
-        def _read(self, stream):
-            self.offset = stream.read_s24()
-
-    class iflt(Bytecode):
-        __slots__ = ('offset',)
-        code = 0x15
-        def _read(self, stream):
-            self.offset = stream.read_s24()
-
-    class ifnge(Bytecode):
-        __slots__ = ('offset',)
-        code = 0x0f
-        def _read(self, stream):
-            self.offset = stream.read_s24()
-
-    class ifngt(Bytecode):
-        __slots__ = ('offset',)
-        code = 0x0e
-        def _read(self, stream):
-            self.offset = stream.read_s24()
-
-    class ifnle(Bytecode):
-        __slots__ = ('offset',)
-        code = 0x0d
-        def _read(self, stream):
-            self.offset = stream.read_s24()
-
-    class ifnlt(Bytecode):
-        __slots__ = ('offset',)
-        code = 0x0c
-        def _read(self, stream):
-            self.offset = stream.read_s24()
-
-    class ifne(Bytecode):
-        __slots__ = ('offset',)
-        code = 0x14
-        def _read(self, stream):
-            self.offset = stream.read_s24()
-
-    class ifstricteq(Bytecode):
-        __slots__ = ('offset',)
-        code = 0x19
-        def _read(self, stream):
-            self.offset = stream.read_s24()
-
-    class ifstrictne(Bytecode):
-        __slots__ = ('offset',)
-        code = 0x1a
-        def _read(self, stream):
-            self.offset = stream.read_s24()
-
-    class iftrue(Bytecode):
-        __slots__ = ('offset',)
-        code = 0x11
-        def _read(self, stream):
-            self.offset = stream.read_s24()
-
-    class label(Bytecode):
-        __slots__ = ()
-        code = 0x09
-
-    class newobject(Bytecode):
-        __slots__ = ('arg_count',)
-        code = 0x55
-        def _read(self, stream):
-            self.arg_count = stream.read_u30()
-
-    class newarray(Bytecode):
-        __slots__ = ('arg_count',)
-        code = 0x56
-        def _read(self, stream):
-            self.arg_count = stream.read_u30()
-
-    class newcatch(Bytecode):
-        __slots__ = ('index',)
-        code = 0x5a
-        def _read(self, stream):
-            self.index = stream.read_u30()
+    class dup(Bytecode):
+        code = 0x2a
+        stack_before = ('value',)
+        stack_after = ('value', 'value')
 
     class dxns(Bytecode):
-        __slots__ = ('index',)
         code = 0x06
-        def _read(self, stream):
-            self.index = stream.read_u30()
+        format = (
+            ('namespace', str, 'string', io.u30),
+            )
 
-    class getdescandants(Bytecode):
-        __slots__ = ('index',)
-        code = 0x59
-        def _read(self, stream):
-            self.index = stream.read_u30()
+    class dxnslate(Bytecode):
+        code = 0x07
+        stack_before = ('namespace',)
 
-    class esc_xelem(Bytecode):
-        __slots__ = ()
+    class equals(BinaryBytecode):
+        code = 0xab
+
+    class esc_xattr(UnaryBytecode):
+        code = 0x72
+
+    class exc_xelem(UnaryBytecode):
         code = 0x71
+
+    class findproperty(PropertyBytecode):
+        code = 0x5e
+        format = (
+            ('property', MultinameInfo, 'multiname', io.u30),
+            )
+        def _stack_before(self):
+            return super()._stack_before()[1:]
+        stack_after = ('obj',)
+
+
+    class findpropstrict(PropertyBytecode):
+        code = 0x5d
+        format = (
+            ('property', MultinameInfo, 'multiname', io.u30),
+            )
+        def _stack_before(self):
+            return super()._stack_before()[1:]
+        stack_after = ('obj',)
+
+    class getdescendants(PropertyBytecode):
+        code = 0x59
+        format = (
+            ('name', str, 'string', io.u30),
+            )
+        stack_after = ('value',)
+
+    class getglobalscope(Bytecode):
+        code = 0x64
+        stack_after = ('obj',)
+
+    class getglobalslot(Bytecode):
+        code = 0x6e
+        format = (
+            ('slotindex', Slot, None, io.u30),
+            )
+        stack_after = ('value',)
+
+    class getlex(Bytecode):
+        code = 0x60
+        format = (
+            ('property', MultinameInfo, 'multiname', io.u30),
+            )
+        stack_after = ('obj',)
+
+    class getlocal(Bytecode):
+        code = 0x62
+        format = (
+            ('register', Register, None, io.u30),
+            )
+        stack_after = ('value',)
+
+    class getlocal_0(Bytecode):
+        code = 0xd0
+        stack_after = ('value',)
+
+    class getlocal_1(Bytecode):
+        code = 0xd1
+        stack_after = ('value',)
+
+    class getlocal_2(Bytecode):
+        code = 0xd2
+        stack_after = ('value',)
+
+    class getlocal_3(Bytecode):
+        code = 0xd3
+        stack_after = ('value',)
+
+    class getproperty(PropertyBytecode):
+        code = 0x66
+        format = (
+            ('property', MultinameInfo, 'multiname', io.u30),
+            )
+        stack_after = ('value',)
+
+    class getscopeobject(Bytecode):
+        code = 0x65
+        format = (
+            ('index', int, None, io.u8),
+            )
+        stack_after = ('scope',)
+
+    class getslot(Bytecode):
+        code = 0x6c
+        format = (
+            ('slotindex', Slot, None, io.u30),
+            )
+        stack_before = ('obj',)
+        stack_after = ('value',)
+
+    class getsuper(PropertyBytecode):
+        code = 0x04
+        format = (
+            ('classname', MultinameInfo, 'multiname', io.u30),
+            )
+        propertyattr = 'classname'
+
+    class greaterequals(BinaryBytecode):
+        code = 0xaf
+
+    class greaterthan(BinaryBytecode):
+        code = 0xb0 #probably
+
+    class hasnext(Bytecode):
+        code = 0x1f
+        stack_before = ('obj', 'cur_index')
+        stack_after = ('next_index',)
+
+    class hasnext2(Bytecode):
+        code = 0x32
+        format = (
+            ('object_reg', Register, None, io.u30),
+            ('index_reg', Register, None, io.u30),
+            )
+        stack_after = ('value',)
+
+    class ifeq(JumpBytecode):
+        code = 0x13
+        stack_before = ('value1', 'value2')
+
+    class iffalse(JumpBytecode):
+        code = 0x12
+        stack_before = ('value',)
+
+    class ifge(JumpBytecode):
+        code = 0x18
+        stack_before = ('value1', 'value2')
+
+    class ifgt(JumpBytecode):
+        code = 0x17
+        stack_before = ('value1', 'value2')
+
+    class ifle(JumpBytecode):
+        code = 0x16
+        stack_before = ('value1', 'value2')
+
+    class iflt(JumpBytecode):
+        code = 0x15
+        stack_before = ('value1', 'value2')
+
+    class ifnge(JumpBytecode):
+        code = 0x0f
+        stack_before = ('value1', 'value2')
+
+    class ifngt(JumpBytecode):
+        code = 0x0e
+        stack_before = ('value1', 'value2')
+
+    class ifnle(JumpBytecode):
+        code = 0x0d
+        stack_before = ('value1', 'value2')
+
+    class ifnlt(JumpBytecode):
+        code = 0x0c
+        stack_before = ('value1', 'value2')
+
+    class ifne(JumpBytecode):
+        code = 0x14
+        stack_before = ('value1', 'value2')
+
+    class ifstricteq(JumpBytecode):
+        code = 0x19
+        stack_before = ('value1', 'value2')
+
+    class ifstrictne(JumpBytecode):
+        code = 0x1a
+        stack_before = ('value1', 'value2')
+
+    class iftrue(JumpBytecode):
+        code = 0x11
+        stack_before = ('value', )
+
+    class in_(BinaryBytecode):
+        code = 0xb4
+
+    class inclocal(Bytecode):
+        code = 0x92
+        format = (
+            ('register', Register, None, io.u30),
+            )
+
+    class inclocal_i(Bytecode):
+        code = 0xc2
+        format = (
+            ('register', Register, None, io.u30),
+            )
+
+    class increment(UnaryBytecode):
+        code = 0x91
+
+    class increment_i(UnaryBytecode):
+        code = 0xc0
+
+    class initproperty(PropertyBytecode):
+        code = 0x68
+        format = (
+            ('property', MultinameInfo, 'multiname', io.u30),
+            )
+        def _stack_before(self):
+            return super()._stack_before() + ('value',)
+
+    class instanceof(BinaryBytecode):
+        code = 0xb1
+
+    class istype(Bytecode):
+        code = 0xb2
+        format = (
+            ('typename', MultinameInfo, 'multiname', io.u30),
+            )
+        stack_before = ('value',)
+        stack_after = ('result',)
+
+    class istypelate(Bytecode):
+        code = 0xb3
+        stack_before = ('value', 'type')
+        stack_after = ('result',)
+
+    class jump(JumpBytecode):
+        code = 0x10
+
+    class kill(Bytecode):
+        code = 0x08
+        format = (
+            ('register', Register, None, io.u30),
+            )
+
+    class label(Bytecode):
+        code = 0x09
+
+    class lessequals(BinaryBytecode):
+        code = 0xae
+
+    class lessthan(BinaryBytecode):
+        code = 0xad
+
+    class lookupswitch(BinaryBytecode):
+        __slots__ = ('default_offset', 'case_offsets')
+        code = 0x1b
+        def _read(self, stream, index):
+            self.default_offset = Offset(stream.read_s24())
+            self.case_offsets = [stream.read_s24()
+                for i in range(stream.read_u30())]
+        def __repr__(self):
+            return '<{} {} {}({})>'.format(self.__class__.__name__,
+                self.default_offset, len(self.case_offsets),
+                ','.join(map(str, self.case_offsets)))
+
+    class lshift(BinaryBytecode):
+        code = 0xa5
+
+    class modulo(BinaryBytecode):
+        code = 0xa4
+
+    class multiply(BinaryBytecode):
+        code = 0xa2
+
+    class multiply_i(BinaryBytecode):
+        code = 0xc7
+
+    class negate(UnaryBytecode):
+        code = 0x90
+
+    class negate_i(UnaryBytecode):
+        code = 0xc4
+
+    class newactivation(Bytecode):
+        code = 0x57
+        stack_after = ('newactivation',)
+
+    class newarray(Bytecode):
+        code = 0x56
+        format = (
+            ('arg_count', int, None, io.u30),
+            )
+        @property
+        def stack_before(self):
+            return tuple('value{}'.format(i) for i in xrange(self.arg_count))
+
+    class newcatch(Bytecode):
+        code = 0x5a
+        format = (
+            ('exception', ExceptionInfo, 'exception_info', io.u30),
+            )
+        stack_after = ('catchscope',)
+
+    class newclass(Bytecode):
+        code = 0x58
+        format = (
+            ('klass', InstanceInfo, 'class', io.u30),
+            )
+        stack_before = ('basetype',)
+        stack_after = ('newclass',)
+
+    class newfunction(Bytecode):
+        code = 0x40
+        format = (
+            ('function', MethodInfo, 'method', io.u30),
+            )
+        stack_after = ('function_obj',)
+
+    class newobject(Bytecode):
+        code = 0x55
+        format = (
+            ('arg_count', int, None, io.u30),
+            )
+        @property
+        def stack_before(self):
+            return sum(
+                (('name{}'.format(i), 'value{}'.format(i))
+                for i in xrange(self.arg_count)),
+                tuple())
+        stack_after = ('newobj',)
+
+    class nextname(Bytecode):
+        code = 0x1e
+        stack_before = ('obj', 'index')
+        stack_after = ('name',)
+
+    class nextvalue(Bytecode):
+        code = 0x23
+        stack_before = ('obj', 'index')
+        stack_after = ('value',)
+
+    class nop(Bytecode):
+        code = 0x02
+    class nop1(Bytecode):
+        code = 0xff
+
+    class not_(Bytecode):
+        code = 0x96
+
+    class pop(Bytecode):
+        code = 0x29
+        stack_before = ('value',)
+
+    class popscope(Bytecode):
+        code = 0x1d
+
+    class pushbyte(Bytecode):
+        code = 0x24
+        format = (
+            ('byte_value', int, None, io.u8),
+            )
+        stack_after = ('value',)
+
+    class pushdouble(Bytecode):
+        code = 0x2f
+        format = (
+            ('double', float, 'double', io.u30),
+            )
+        stack_after = ('value',)
+
+    class pushfalse(Bytecode):
+        code = 0x27
+        stack_after = ('value',)
+
+    class pushint(Bytecode):
+        code = 0x2d
+        format = (
+            ('integer', int, 'integer', io.u30),
+            )
+        stack_after = ('value',)
+
+    class pushnamespace(Bytecode):
+        code = 0x31
+        format = (
+            ('namespace', NamespaceInfo, 'namespace', io.u30),
+            )
+        stack_after = ('namespace',)
+
+    class pushnan(Bytecode):
+        code = 0x28
+        stack_after = ('value',)
+
+    class pushnull(Bytecode):
+        code = 0x20
+        stack_after = ('value',)
+
+    class pushscope(Bytecode):
+        code = 0x30
+        stack_before = ('value',)
+
+    class pushshort(Bytecode):
+        code = 0x25
+        format = (
+            ('value', int, None, io.u30),
+            )
+        stack_after = ('value',)
+
+    class pushstring(Bytecode):
+        code = 0x2c
+        format = (
+            ('value', str, 'string', io.u30),
+            )
+        stack_after = ('value',)
+
+    class pushtrue(Bytecode):
+        code = 0x26
+        stack_after = ('value',)
+
+    class pushuint(Bytecode):
+        code = 0x2e
+        format = (
+            ('value', int, 'uinteger', io.u30),
+            )
+        stack_after = ('value',)
+
+    class pushundefined(Bytecode):
+        code = 0x21
+        stack_after = ('value',)
+
+    class pushwith(Bytecode):
+        code = 0x1c
+        stack_before = ('scope_obj',)
+
+    class returnvalue(Bytecode):
+        code = 0x48
+        stack_before = ('return_value',)
+
+    class returnvoid(Bytecode):
+        code = 0x47
+
+    class rshift(BinaryBytecode):
+        code = 0xa6
+
+    class setlocal(Bytecode):
+        code = 0x63
+        format = (
+            ('value', Register, None, io.u30),
+            )
+        stack_before = ('value',)
+
+    class setlocal_0(Bytecode):
+        code = 0xd4
+        stack_before = ('value',)
+
+    class setlocal_1(Bytecode):
+        code = 0xd5
+        stack_before = ('value',)
+
+    class setlocal_2(Bytecode):
+        code = 0xd6
+        stack_before = ('value',)
+
+    class setlocal_3(Bytecode):
+        code = 0xd7
+        stack_before = ('value',)
+
+    class setglobalslot(Bytecode):
+        code = 0x6f
+        format = (
+            ('slotindex', Slot, None, io.u30),
+            )
+        stack_before = ('value',)
+
+    class setproperty(PropertyBytecode):
+        code = 0x61
+        format = (
+            ('property', MultinameInfo, 'multiname', io.u30),
+            )
+        def _stack_before(self):
+            return super()._stack_before() + ('value',)
+
+    class setslot(Bytecode):
+        code = 0x6d
+        format = (
+            ('slotindex', Slot, None, io.u30),
+            )
+        stack_before = ('obj', 'value')
+
+    class setsuper(PropertyBytecode):
+        code = 0x05
+        format = (
+            ('property', MultinameInfo, 'multiname', io.u30),
+            )
+        def _stack_before(self):
+            return super()._stack_before() + ('value',)
+
+    class strictequals(BinaryBytecode):
+        code = 0xac
+
+    class subtract(BinaryBytecode):
+        code = 0xa1
+
+    class subtract_i(BinaryBytecode):
+        code = 0xc6
+
+    class swap(Bytecode):
+        code = 0x2b
+        stack_before = ('value1', 'value2')
+        stack_after = ('value2', 'value1')
+
+    class throw(Bytecode):
+        code = 0x03
+        stack_before = ('value',)
+
+    class typeof(Bytecode):
+        code = 0x95
+        stack_before = ('value',)
+        stack_after = ('typename',)
+
+    class urshift(BinaryBytecode):
+        code = 0xa7
 
 class Parser(object):
 
-    def __init__(self, str):
+    def __init__(self, str, index):
         self._stream = ABCStream(str)
+        self._index = index
 
     def parse(self):
         while True:
@@ -692,8 +882,8 @@ class Parser(object):
                 code = self._stream.read_u8()
             except IndexError:
                 break #no more characters
-            code = bytecodes[code].read(self._stream)
+            code = bytecodes[code].read(self._stream, self._index)
             yield code
 
-def parse(code):
-    return list(Parser(code).parse())
+def parse(code, index):
+    return list(Parser(code, index).parse())
