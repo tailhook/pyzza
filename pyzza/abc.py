@@ -255,6 +255,9 @@ class OptionDetail(ABCStruct):
         stream.write_u30(val)
         stream.write_u8(kind)
 
+    def __repr__(self):
+        return '<{} {!r}>'.format(self.__class__.__name__, self.value)
+
 class TraitSlot(ABCStruct):
 
     @classmethod
@@ -277,6 +280,11 @@ class TraitSlot(ABCStruct):
             stream.write_u30(kind)
         else:
             stream.write_u30(0)
+
+    def __repr__(self):
+        return '<{} {}:{}{}>'.format(self.__class__.__name__, self.slot_id,
+            self.type_name, '=' + repr(getattr(self, 'value'))
+            if hasattr(self, 'value') else '')
 
 class TraitClass(ABCStruct):
 
