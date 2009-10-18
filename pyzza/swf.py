@@ -160,12 +160,15 @@ def main():
             taglist.append(tag)
             if options.print_tags:
                 print(tag)
-            if options.print_dis and hasattr(tag, 'print'):
-                tag.print()
-            if hasattr(tag, 'decode'):
-                tag.decode()
+            if options.print_dis and hasattr(tag, 'disassemble'):
+                tag.disassemble()
 
     if options.output:
+        if options.optimize:
+            from . import fastbytes
+            for tag in taglist:
+                if isinstance(tag, tags.DoABC):
+                    fastbytes.optimize(tag)
         if options.strip:
             good_tags = (
                 tags.DoABC,

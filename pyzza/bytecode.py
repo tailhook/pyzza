@@ -1,4 +1,5 @@
 from collections import defaultdict
+import sys
 
 from .io import ABCStream
 from . import io
@@ -948,7 +949,7 @@ def _make_labels(codes, ext_labels):
         if isinstance(code, JumpBytecode):
             code = code.__class__(code.offset)
             if code.offset < 0:
-                code.offset = bw[index+4+code.offset]
+                code.offset = bw[index+3+code.offset] #should land after label
             else:
                 nlabel = Label()
                 labels[index+4+code.offset].append(nlabel)
@@ -956,7 +957,11 @@ def _make_labels(codes, ext_labels):
         elif isinstance(code, label):
             bw[index] = code
         yield index, code
-
+    if (index+1) in labels:
+        print("WARNING: some labels after end of bytecodes", file=sys.stderr)
+        for i in labels.pop(index+1, ()):
+            yield index, i
+    assert not labels, 'Not all labels put into stream {!r}'.format(labels)
 
 def make_labels(codes, ext_labels=()):
     return list(_make_labels(codes, ext_labels))

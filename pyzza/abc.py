@@ -411,22 +411,20 @@ class MethodBodyInfo(ABCStruct):
         self.traits_info = [TraitsInfo.read(stream, index)
             for i in range(trait_count)]
         with index.for_method(self) as mindex:
-            self.bytecode = bytecode.parse(self.code, mindex)
-        return self
-
-    def decode(self):
+            bcode = bytecode.parse(self.code, mindex)
         ext_labels = defaultdict(list)
         for exc in self.exception_info:
-            for (k, v) in exc.put_labels(self.bytecode):
+            for (k, v) in exc.put_labels(bcode):
                 ext_labels[k].append(v)
-        self.bytecode = bytecode.make_labels(self.bytecode, ext_labels)
+        self.bytecode = list(map(itemgetter(1),
+            bytecode.make_labels(bcode, ext_labels)))
+        return self
 
     def write(self, stream, index):
         with index.for_method(self) as mindex:
-            self.bytecode, self.code = bytecode.assemble(
-                map(itemgetter(1), self.bytecode), mindex)
+            bcode, self.code = bytecode.assemble(self.bytecode, mindex)
         lindex = dict((label, index)
-            for (index, label) in self.bytecode
+            for (index, label) in bcode
             if isinstance(label, bytecode.Label))
         for exc in self.exception_info:
             exc.get_labels(lindex)
@@ -855,15 +853,12 @@ class DoABC(Tag):
         abc = ABCStream(self.body)
         self.real_body = ABCFile.read(abc)
 
-    def decode(self):
-        for i in self.real_body.method_body_info:
-            i.decode()
-
-    def print(self):
+    def disassemble(self):
         for body in self.real_body.method_body_info:
             print("METHOD", body.method.name, "PARAMS",
                 getattr(body.method, 'param_name', body.method.param_type))
-            for (off, code) in body.bytecode:
+            index = Index(self.real_body, body)
+            for (off, code) in bytecode.parse(body.code, index):
                 print('    {:5d} {!s}'.format(off, code))
 
     def blob(self):

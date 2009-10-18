@@ -8,7 +8,11 @@ package {
             var label:TextField = new TextField();
             label.background = true;
             label.border = true;
-            label.text = Math.random() >= 0.5 ? "HELLO" : "WORLD";
+            if(Math.random() >= 0.5) {
+                label.text = "HELLO";
+            } else {
+                label.text = "WORLD";
+            }
             this.addChild(label);
         }
     }
