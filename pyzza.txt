@@ -38,7 +38,8 @@ Differences from Python
  * apart from that any code can be in class body, non ``del``eted local
     variables will be static members
  * global functions like ``range()``, ``len()`` etc. are not functions, they are
-    reserved words. Also ``range()`` works only inside ``for`` statement.
+    reserved words. Also ``range()`` works only inside ``for`` statement
+ * only positional arguments supported
 
 Differences from ActionScript
 -----------------------------
@@ -50,6 +51,7 @@ Differences from ActionScript
     a good reason for that, e.g. a good perfomance improvements)
  * No E4X support, currently (looking forward on how to fix it to not become of
     superset of python syntax)
+ * No typed arguments or typed variables, no variable declarations either
 
 Current limitations
 -------------------

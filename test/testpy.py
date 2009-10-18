@@ -1,5 +1,6 @@
 from flash.display import Sprite
 from flash.text import TextField
+from flash.text import TextFormat
 
 @package('')
 class Main(Sprite):
@@ -8,5 +9,5 @@ class Main(Sprite):
         label = TextField()
         label.background = True
         label.border = True
-        label.text = "Hello"
+        label.text = 'Hello'
         self.addChild(label)

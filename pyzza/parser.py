@@ -24,6 +24,7 @@ class GetAttr(Node): pass #actual node
 class Subscript(Node): pass
 class _Call(Node): pass #trailer
 class Call(Node): pass #actual node
+class Decorator(Node): pass #actual node
 class CallAttr(Node): pass #actual node
 
 def subscript(lst):
@@ -124,7 +125,8 @@ def parsers():
     bases = Delayed()
     bases += varname & ~symbol(',') & bases | varname > 'bases'
     _bases = ~symbol('(') & bases & ~symbol(')')
-    class_stmt = BLine(~symbol('@') & varname & call > 'decorator')[:]\
+    class_stmt = BLine((~symbol('@') & varname & call
+        > Decorator) > 'decorator')[:]\
         & BLine(~ident('class') & (varname > 'name')
         & _bases[:1] & colon) & body > Class
     argdef = varname & (~symbol(',') & varname)[:] > list

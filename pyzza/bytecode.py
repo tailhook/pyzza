@@ -60,6 +60,8 @@ class Bytecode(object, metaclass=BytecodeMeta):
     def _write(self, stream, index):
         for (name, typ, idx, format) in self.format:
             val = getattr(self, name)
+            assert isinstance(val, typ), "Arg {!r} for {!s} is wrong: {!r}"\
+                .format(name, self.__class__.__name__, val)
             if idx is not None:
                 val = getattr(index, 'get_{}_index'.format(idx))(val)
             val = stream.write_formatted(format, val)

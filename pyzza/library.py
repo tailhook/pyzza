@@ -1,6 +1,6 @@
 from weakref import ref
 
-from . import swf, tags
+from . import swf, tags, abc
 
 class ClassNotFoundError(Exception):
     pass
@@ -32,13 +32,10 @@ class Library:
         if (package, name) in self.class_cache:
             return self.class_cache
         for head in self.code_headers:
-            for (idx, inst) in enumerate(head.instance_info):
-                qname = head.constant_pool.multiname_info[inst.name-1]
-                cname = head.constant_pool.string[qname.name-1]
-                ns = head.constant_pool.namespace_info[qname.ns-1]
-                nsname = head.constant_pool.string[ns.name-1]
-                if cname == name and nsname == package:
-                    res = AS3Class(package, name, self,
+            for (idx, cls) in enumerate(head.class_info):
+                qname = cls.instance_info.name
+                if name == qname.name and qname.namespace.name == package:
+                    res = AS3Class(qname, self,
                         index=idx,
                         header=head,
                         )
@@ -49,27 +46,22 @@ class Library:
 
 class AS3Class:
 
-    def __init__(self, package, name, lib, header, index):
-        self.package = package
-        self.name = name
+    def __init__(self, qname, lib, header, index):
+        self.name = qname
         self.library = ref(lib)
         self.header = header
         self.index = index
 
     def __repr__(self):
         return '<{} {}:{} from {}:{}>'.format(self.__class__.__name__,
-            self.package, self.name,
+            self.name.namespace.name, self.name.name,
             self.header._source, self.index)
 
     def get_base(self):
         lib = self.library()
-        sn = self.header.instance_info[self.index].super_name
-        if not sn:
+        sn = self.header.class_info[self.index].instance_info.super_name
+        if isinstance(sn, abc.AnyType):
             return None
-        qname = self.header.constant_pool.multiname_info[sn-1]
-        cname = self.header.constant_pool.string[qname.name-1]
-        ns = self.header.constant_pool.namespace_info[qname.ns-1]
-        nsname = self.header.constant_pool.string[ns.name-1]
-        return lib.get_class(nsname, cname)
+        return lib.get_class(sn.namespace.name, sn.name)
 
 

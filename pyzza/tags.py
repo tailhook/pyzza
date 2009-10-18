@@ -88,6 +88,9 @@ class SymbolClass(Tag):
         self.length = len(self.data)
         return super().blob()
 
+    def __repr__(self):
+        return '<{} {!r}>'.format(self.__class__.__name__, self.assoc)
+
 class FileAttributes(Tag):
     code = TAG_FileAttributes
 

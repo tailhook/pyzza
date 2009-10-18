@@ -24,6 +24,15 @@ class ABCStruct(object):
 
 class CPoolInfo(ABCStruct):
 
+    def __init__(self):
+        self.integer = []
+        self.uinteger = []
+        self.double = []
+        self.string = []
+        self.namespace_info = []
+        self.ns_set_info = []
+        self.multiname_info = []
+
     @classmethod
     def read(cls, stream):
         self = cls()
@@ -122,6 +131,12 @@ class NamespaceInfo(ABCStruct):
 
     def __repr__(self):
         return '<{:s} {:s}>'.format(self.__class__.__name__, self.name)
+
+    def __eq__(self, other):
+        return self.kind == other.kind and self.name == other.name
+
+    def __hash__(self):
+        return hash((self.kind, self.name))
 
 class NSUser(NamespaceInfo):
     kind = CONSTANT_Namespace
@@ -287,6 +302,11 @@ class TraitSlot(ABCStruct):
             if hasattr(self, 'value') else '')
 
 class TraitClass(ABCStruct):
+    kind = 4
+
+    def __init__(self, slot_id=0, classi=None):
+        self.slot_id = slot_id
+        self.classi = classi
 
     @classmethod
     def read(cls, stream, index):
@@ -312,6 +332,13 @@ class TraitsInfo(ABCStruct):
     ATTR_Final = 0x01
     ATTR_Override = 0x02
     ATTR_Metadata = 0x04
+
+    def __init__(self, name=None, data=None, attr=0):
+        if name:
+            self.name = name
+            self.kind = data.kind
+            self.data = data
+            self.attr = attr
 
     @classmethod
     def read(cls, stream, index):
@@ -504,31 +531,48 @@ CONSTANT_MultinameLA = 0x1C
 class MultinameInfo(ABCStruct):
 
     @classmethod
-    def read(cls, stream, cpool):
+    def read(cls, stream, index):
         kind = stream.read_u8()
-        self = multiname_kinds[kind]()
+        self = multiname_kinds[kind]._read(stream, index)
         assert kind == self.kind
-        self._read(stream, cpool)
         return self
 
 class QName(MultinameInfo):
     kind = CONSTANT_QName
-    def _read(self, stream, index):
-        self.namespace = index.get_namespace(stream.read_u30())
-        self.name = index.get_string(stream.read_u30())
+
+    def __init__(self, namespace, name):
+        self.namespace = namespace
+        self.name = name
+
+    @classmethod
+    def _read(cls, stream, index):
+        return cls(index.get_namespace(stream.read_u30()),
+            index.get_string(stream.read_u30()))
+
     def __repr__(self):
         return '<{} {}:{}>'.format(self.__class__.__name__,
             self.namespace, self.name)
+
     def write(self, stream, index):
         stream.write_u8(self.kind)
         stream.write_u30(index.get_namespace_index(self.namespace))
         stream.write_u30(index.get_string_index(self.name))
+
+    def __eq__(self, other):
+        return self.name == other.name and self.namespace == other.namespace
+
+    def __hash__(self):
+        return hash((self.name, self.namespace))
+
 class QNameA(QName):
     kind = CONSTANT_QNameA
 class RTQName(MultinameInfo):
     kind = CONSTANT_RTQName
-    def _read(self, stream, cpool):
-        self.name = cpool.string[stream.read_u30()-1]
+    @classmethod
+    def _read(cls, stream, index):
+        self = cls()
+        self.name = index.get_string(stream.read_u30())
+        return self
     def __repr__(self):
         return '<{} {}>'.format(self.__class__.__name__, self.name)
     def write(self, stream, index):
@@ -538,7 +582,10 @@ class RTQNameA(RTQName):
     kind = CONSTANT_RTQNameA
 class RTQNameL(MultinameInfo):
     kind = CONSTANT_RTQNameL
-    def _read(self, stream, cpool): pass
+    @classmethod
+    def _read(cls, stream, index):
+        self = cls()
+        return self
     def __repr__(self):
         return '<RTQNameL>'
     def write(self, stream, index):
@@ -547,9 +594,12 @@ class RTQNameLA(RTQNameL):
     kind = CONSTANT_RTQNameLA
 class Multiname(MultinameInfo):
     kind = CONSTANT_Multiname
-    def _read(self, stream, index):
+    @classmethod
+    def _read(cls, stream, index):
+        self = cls()
         self.name = index.get_string(stream.read_u30())
         self.namespace_set = index.get_namespace_set(stream.read_u30())
+        return self
     def __repr__(self):
         return '<{} {}:{}>'.format(self.__class__.__name__,
             self.namespace_set, self.name)
@@ -561,8 +611,11 @@ class MultinameA(Multiname):
     kind = CONSTANT_MultinameA
 class MultinameL(MultinameInfo):
     kind = CONSTANT_MultinameL
-    def _read(self, stream, index):
+    @classmethod
+    def _read(cls, stream, index):
+        self = cls()
         self.namespace_set = index.get_namespace_set(stream.read_u30())
+        return self
     def __repr__(self):
         return '<{} {}>'.format(self.__class__.__name__, self.namespace_set)
     def write(self, stream, index):
@@ -837,14 +890,17 @@ class IndexCreator(object):
         if isinstance(value, AnyType):
             return 0
         self.multinames[value] += 1
+        value.write(DummyABCStream(), self)
         return 0
 
     def get_namespace_index(self, value):
         self.namespaces[value] += 1
+        value.write(DummyABCStream(), self)
         return 0
 
     def get_namespace_set_index(self, value):
         self.namespace_sets[value] += 1
+        value.write(DummyABCStream(), self)
         return 0
 
     def get_double_index(self, value):
@@ -858,6 +914,7 @@ class IndexCreator(object):
         return self.data.class_info.index(cls)
 
     def get_metadata_index(self, value):
+        self.metadata[value] += 1
         return 0
 
     def for_method(self, method):
@@ -898,6 +955,16 @@ class IndexCreator(object):
         del self._method
 
 class ABCFile(ABCStruct):
+
+    def __init__(self):
+        self.minor_version = 16
+        self.major_version = 46
+        self.constant_pool = CPoolInfo()
+        self.method_info = []
+        self.metadata_info = []
+        self.class_info = []
+        self.script_info = []
+        self.method_body_info = []
 
     @classmethod
     def read(cls, stream):
@@ -985,6 +1052,9 @@ class DoABC(Tag):
             for (off, code) in bytecode.parse(body.code, index):
                 print('    {:5d} {!s}'.format(off, code))
 
+    def empty(self):
+        self.real_body = ABCFile()
+
     def clean_metadata(self):
         self.real_body.metadata_info[:] = []
         for i in self.real_body.method_info:
@@ -1009,7 +1079,6 @@ class DoABC(Tag):
     def blob(self):
         buf = ABCStream()
         prefix = struct.pack('<L', self.flags)+self.name.encode('utf-8')+b'\x00'
-        olddata = self.data
         self.real_body.write(buf)
         self.data = prefix + buf.getvalue()
         self.length = len(self.data)

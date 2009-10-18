@@ -59,7 +59,7 @@ class Header(object):
     frame_rate = None
     frame_count = None
 
-    def __init__(self, compressed=True, version=10, frame_size=(100,100),
+    def __init__(self, compressed=True, version=10, frame_size=(10000,7500),
         frame_rate=(15<<8), frame_count=1):
         self.compressed = compressed
         self.version = version
@@ -153,6 +153,8 @@ def main():
 
     with open(args[0], 'rb') as f:
         h = Header.read(f)
+        if options.print_tags:
+            print(h)
         tag = None
         taglist = []
         while not isinstance(tag, tags.End):
