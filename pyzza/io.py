@@ -14,6 +14,9 @@ class ABCStream(BytesIO):
     def read_formatted(self, format):
         return getattr(self, 'read_' + format)()
 
+    def write_formatted(self, format, value):
+        return getattr(self, 'write_' + format)(value)
+
     def read_s24(self):
         bytes = self.read(3)
         res = bytes[0] | (bytes[1] << 8) | (bytes[2] << 16)
@@ -22,9 +25,9 @@ class ABCStream(BytesIO):
         return res
 
     def write_s24(self, val):
+        assert -(1 << 23) < val < (1 << 23)
         if val < 0:
-            val = -val | (1 << 24)
-        assert val < (1 << 23)
+            val = -val | (1 << 23)
         self.write(bytes([val & 0xFF,
             ((val >> 8) & 0xFF),
             val >> 16]))

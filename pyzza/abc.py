@@ -410,7 +410,8 @@ class MethodBodyInfo(ABCStruct):
         return self
 
     def write(self, stream, index):
-        #self.compile()
+        with index.for_method(self) as mindex:
+            self.code = bytecode.assemble(self.bytecode, mindex)
         stream.write_u30(index.get_method_index(self.method))
         stream.write_u30(self.max_stack)
         stream.write_u30(self.local_count)
@@ -694,6 +695,9 @@ class Index(object):
 
     def get_exception_info(self, index):
         return self._method.exception_info[index]
+
+    def get_exception_info_index(self, value):
+        return self._method.exception_info.index(value)
 
     def get_constant(self, kind, val):
         if kind == CONSTANT_Int:

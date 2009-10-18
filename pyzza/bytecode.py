@@ -54,6 +54,17 @@ class Bytecode(object, metaclass=BytecodeMeta):
                 val = typ(val)
             setattr(self, name, val)
 
+    def write(self, stream, index):
+        stream.write_u8(self.code)
+        self._write(stream, index)
+
+    def _write(self, stream, index):
+        for (name, typ, idx, format) in self.format:
+            val = getattr(self, name)
+            if idx is not None:
+                val = getattr(index, 'get_{}_index'.format(idx))(val)
+            val = stream.write_formatted(format, val)
+
     def __repr__(self):
         return '<{}{}>'.format(self.__class__.__name__,
             ''.join(' '+repr(getattr(self, a)) for (a,_,_,_) in self.format))
@@ -885,5 +896,20 @@ class Parser(object):
             code = bytecodes[code].read(self._stream, self._index)
             yield code
 
+class Assembler(object):
+
+    def __init__(self, codes, index):
+        self._codes = codes
+        self._index = index
+
+    def assemble(self):
+        self._stream = ABCStream()
+        for code in self._codes:
+            code.write(self._stream, self._index)
+        return self._stream.getvalue()
+
 def parse(code, index):
     return list(Parser(code, index).parse())
+
+def assemble(codes, index):
+    return Assembler(codes, index).assemble()
