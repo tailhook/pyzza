@@ -58,12 +58,14 @@ class ABCStream(BytesIO):
 
     def write_u30(self, val):
         assert val < (1 << 30)
-        while val:
+        while True:
             byte = val & 127
             val >>= 7
             if val:
                 byte |= 128
             self.write(bytes([byte]))
+            if not val:
+                break
 
     def read_s32(self):
         res = 0
@@ -80,7 +82,7 @@ class ABCStream(BytesIO):
         return res
 
     def write_s32(self, val):
-        if res < 0:
+        if val < 0:
             sign = 64
             val = -val
         else:

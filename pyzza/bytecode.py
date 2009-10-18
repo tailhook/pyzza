@@ -1,7 +1,7 @@
 from .io import ABCStream
 from . import io
 from .abc import (MultinameInfo, MethodInfo, ExceptionInfo,
-    InstanceInfo, NamespaceInfo)
+    ClassInfo, NamespaceInfo)
 
 class Offset(int): pass
 class Register(int): pass
@@ -654,7 +654,7 @@ class bytecodes(metaclass=gather_bytecodes):
     class newclass(Bytecode):
         code = 0x58
         format = (
-            ('klass', InstanceInfo, 'class', io.u30),
+            ('klass', ClassInfo, 'class', io.u30),
             )
         stack_before = ('basetype',)
         stack_after = ('newclass',)
