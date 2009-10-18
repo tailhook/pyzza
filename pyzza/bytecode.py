@@ -1,11 +1,9 @@
+from collections import defaultdict
+
 from .io import ABCStream
 from . import io
 from .abc import (MultinameInfo, MethodInfo, ExceptionInfo,
-    ClassInfo, NamespaceInfo)
-
-class Offset(int): pass
-class Register(int): pass
-class Slot(int): pass
+    ClassInfo, NamespaceInfo, Offset, Slot, Register)
 
 def gather_bytecodes(name, bases, dic):
     res = {}
@@ -36,7 +34,7 @@ class Bytecode(object, metaclass=BytecodeMeta):
 
     def __init__(self, *args):
         if args:
-            for (i, name) in enumerate(self.__slots__):
+            for (i, (name, _, _, _)) in enumerate(self.format):
                 setattr(self, name, args[i])
 
     @classmethod
@@ -66,12 +64,11 @@ class Bytecode(object, metaclass=BytecodeMeta):
             val = stream.write_formatted(format, val)
 
     def __repr__(self):
-        return '<{}{}>'.format(self.__class__.__name__,
-            ''.join(' '+repr(getattr(self, a)) for (a,_,_,_) in self.format))
+        return '<{}>'.format(str(self))
 
-    def print(self, file=None):
-        print('    ' + self.__class__.__name__,
-            *(repr(getattr(self, a)) for a in self.__slots__))
+    def __str__(self):
+        return self.__class__.__name__ + \
+            ''.join(' '+repr(getattr(self, a)) for (a,_,_,_) in self.format)
 
 class PropertyBytecode(Bytecode):
     propertyattr = 'property'
@@ -104,6 +101,11 @@ class JumpBytecode(Bytecode):
     format = (
         ('offset', Offset, None, io.s24),
         )
+
+class Label(object):
+    __slots__ = ()
+    def write(self, stream, index):
+        pass
 
 class bytecodes(metaclass=gather_bytecodes):
 
@@ -603,7 +605,7 @@ class bytecodes(metaclass=gather_bytecodes):
             ('register', Register, None, io.u30),
             )
 
-    class label(Bytecode):
+    class label(Bytecode, Label):
         code = 0x09
 
     class lessequals(BinaryBytecode):
@@ -889,12 +891,13 @@ class Parser(object):
 
     def parse(self):
         while True:
+            pos = self._stream.tell()
             try:
                 code = self._stream.read_u8()
             except IndexError:
                 break #no more characters
             code = bytecodes[code].read(self._stream, self._index)
-            yield code
+            yield pos, code
 
 class Assembler(object):
 
@@ -904,12 +907,56 @@ class Assembler(object):
 
     def assemble(self):
         self._stream = ABCStream()
+        codes = []
+        memo = {}
+        fwjumps = defaultdict(list)
         for code in self._codes:
+            index = self._stream.tell()
+            if isinstance(code, Label):
+                memo[code] = index
+                fw = fwjumps.pop(code, None)
+                if fw:
+                    for i in fw:
+                        self._stream.seek(i+1)
+                        self._stream.write_s24(index-i-4)
+                    self._stream.seek(index)
+            elif isinstance(code, JumpBytecode):
+                code = code.__class__(code.offset)
+                if code.offset not in memo:
+                    fwjumps[code.offset].append(index)
+                    code.offset = 0
+                else:
+                    code.offset = memo[code.offset]
             code.write(self._stream, self._index)
-        return self._stream.getvalue()
+            codes.append((index, code))
+        assert not fwjumps, 'Not found forward jumps {!r}'.format(fwjumps)
+        return codes, self._stream.getvalue()
 
 def parse(code, index):
     return list(Parser(code, index).parse())
 
 def assemble(codes, index):
     return Assembler(codes, index).assemble()
+
+def _make_labels(codes, ext_labels):
+    bw = {}
+    labels = defaultdict(list, ((k, v[:])
+        for (k, v) in ext_labels.items()))
+    for (index, code) in codes:
+        for i in labels.pop(index, ()):
+            yield index, i
+        if isinstance(code, JumpBytecode):
+            code = code.__class__(code.offset)
+            if code.offset < 0:
+                code.offset = bw[index+4+code.offset]
+            else:
+                nlabel = Label()
+                labels[index+4+code.offset].append(nlabel)
+                code.offset = nlabel
+        elif isinstance(code, label):
+            bw[index] = code
+        yield index, code
+
+
+def make_labels(codes, ext_labels=()):
+    return list(_make_labels(codes, ext_labels))

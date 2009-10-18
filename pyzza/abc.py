@@ -1,8 +1,13 @@
-import pprint
 import struct
+from operator import itemgetter
+from collections import defaultdict
 
 from .tags import Tag, TAG_DoABC
 from .io import ABCStream
+
+class Offset(int): pass
+class Register(int): pass
+class Slot(int): pass
 
 class Undefined(object):
     def __new__(cls):
@@ -409,9 +414,22 @@ class MethodBodyInfo(ABCStruct):
             self.bytecode = bytecode.parse(self.code, mindex)
         return self
 
+    def decode(self):
+        ext_labels = defaultdict(list)
+        for exc in self.exception_info:
+            for (k, v) in exc.put_labels(self.bytecode):
+                ext_labels[k].append(v)
+        self.bytecode = bytecode.make_labels(self.bytecode, ext_labels)
+
     def write(self, stream, index):
         with index.for_method(self) as mindex:
-            self.code = bytecode.assemble(self.bytecode, mindex)
+            self.bytecode, self.code = bytecode.assemble(
+                map(itemgetter(1), self.bytecode), mindex)
+        lindex = dict((label, index)
+            for (index, label) in self.bytecode
+            if isinstance(label, bytecode.Label))
+        for exc in self.exception_info:
+            exc.get_labels(lindex)
         stream.write_u30(index.get_method_index(self.method))
         stream.write_u30(self.max_stack)
         stream.write_u30(self.local_count)
@@ -438,12 +456,28 @@ class ExceptionInfo(ABCStruct):
         self.var_name = index.get_multiname(stream.read_u30())
         return self
 
+    def put_labels(self, bytecodes):
+        p = self.exc_from, bytecode.Label()
+        self.exc_from = p[1]
+        yield p
+        p = self.exc_to, bytecode.Label()
+        self.exc_to = p[1]
+        yield p
+        p = self.target, bytecode.Label()
+        self.target = p[1]
+        yield p
+
     def write(self, stream, index):
         stream.write_u30(self.exc_from)
         stream.write_u30(self.exc_to)
         stream.write_u30(self.target)
         stream.write_u30(index.get_multiname_index(self.exc_type))
         stream.write_u30(index.get_multiname_index(self.var_name))
+
+    def get_labels(self, alllabels):
+        self.exc_from = alllabels[self.exc_from]
+        self.exc_to = alllabels[self.exc_to]
+        self.target = alllabels[self.target]
 
 CONSTANT_QName       = 0x07
 CONSTANT_QNameA      = 0x0D
@@ -809,7 +843,7 @@ class DoABC(Tag):
     def _read(self, stream):
         super()._read(stream)
         self.parse_body()
-        self.decode()
+        self._decode()
 
     def parse_body(self):
         self.flags = struct.unpack('<L', self.data[:4])[0]
@@ -817,16 +851,20 @@ class DoABC(Tag):
         self.name = self.data[4:idx].decode('utf-8')
         self.body = self.data[idx+1:]
 
-    def decode(self):
+    def _decode(self):
         abc = ABCStream(self.body)
         self.real_body = ABCFile.read(abc)
+
+    def decode(self):
+        for i in self.real_body.method_body_info:
+            i.decode()
 
     def print(self):
         for body in self.real_body.method_body_info:
             print("METHOD", body.method.name, "PARAMS",
                 getattr(body.method, 'param_name', body.method.param_type))
-            for i in body.bytecode:
-                i.print(self.real_body.constant_pool)
+            for (off, code) in body.bytecode:
+                print('    {:5d} {!s}'.format(off, code))
 
     def blob(self):
         buf = ABCStream()

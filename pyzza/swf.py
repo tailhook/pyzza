@@ -162,6 +162,8 @@ def main():
                 print(tag)
             if options.print_dis and hasattr(tag, 'print'):
                 tag.print()
+            if hasattr(tag, 'decode'):
+                tag.decode()
 
     if options.output:
         if options.strip:
