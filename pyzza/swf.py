@@ -168,6 +168,7 @@ def main():
             from . import fastbytes
             for tag in taglist:
                 if isinstance(tag, tags.DoABC):
+                    tag.clean_metadata()
                     fastbytes.optimize(tag)
         if options.strip:
             good_tags = (

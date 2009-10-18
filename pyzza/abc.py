@@ -322,7 +322,7 @@ class TraitsInfo(ABCStruct):
         else:
             raise NotImplementedError(self.kind)
 
-        if self.attr & self.ATTR_Metadata:
+        if self.attr & self.ATTR_Metadata: #metadata to be removed
             metadata_count = stream.read_u30()
             self.metadata = [index.get_metadata(stream.read_u30())
                 for i in range(metadata_count)]
@@ -860,6 +860,27 @@ class DoABC(Tag):
             index = Index(self.real_body, body)
             for (off, code) in bytecode.parse(body.code, index):
                 print('    {:5d} {!s}'.format(off, code))
+
+    def clean_metadata(self):
+        self.real_body.metadata_info[:] = []
+        for i in self.real_body.method_info:
+            if hasattr(i, 'param_name'):
+                del i.param_name
+        for s in self.real_body.method_body_info:
+            for t in s.traits_info:
+                if hasattr(t, 'metadata'):
+                    del t.metadata
+        for s in self.real_body.script_info:
+            for t in s.traits_info:
+                if hasattr(t, 'metadata'):
+                    del t.metadata
+        for s in self.real_body.class_info:
+            for t in s.trait:
+                if hasattr(t, 'metadata'):
+                    del t.metadata
+            for t in s.instance_info.trait:
+                if hasattr(t, 'metadata'):
+                    del t.metadata
 
     def blob(self):
         buf = ABCStream()
