@@ -9,6 +9,11 @@ s32 = 's32'
 u32 = 'u32'
 d64 = 'd64'
 
+class uint(int):
+    __slots__ = ()
+    def __init__(self, val):
+        assert self >= 0
+
 class ABCStream(BytesIO):
 
     def read_formatted(self, format):
@@ -34,7 +39,7 @@ class ABCStream(BytesIO):
 
     def read_u16(self):
         bytes = self.read(2)
-        return bytes[0] | (bytes[1] << 8)
+        return uint(bytes[0] | (bytes[1] << 8))
 
     def write_u16(self, val):
         assert 0 <= val < 1 << 16
@@ -43,7 +48,7 @@ class ABCStream(BytesIO):
             val >> 8]))
 
     def read_u8(self):
-        return self.read(1)[0]
+        return uint(self.read(1)[0])
 
     def write_u8(self, val):
         assert 0 <= val < 256
@@ -57,7 +62,7 @@ class ABCStream(BytesIO):
             if not (b[0] & 128):
                 break
         assert res < (1 << 30)
-        return res
+        return uint(res)
 
     def write_u30(self, val):
         assert val < (1 << 30)
@@ -112,7 +117,7 @@ class ABCStream(BytesIO):
             if not (b[0] & 128):
                 break
         assert res < (1 << 32)
-        return res
+        return uint(res)
 
     def write_u32(self, val):
         assert 0 <= val < (1 << 32)
@@ -128,3 +133,8 @@ class ABCStream(BytesIO):
 
     def write_d64(self, val):
         self.write(struct.pack('d', val))
+
+class DummyABCStream(object):
+    for i in dir(ABCStream):
+        if not i.startswith('__') and hasattr(getattr(ABCStream, i), '__call__'):
+            locals()[i] = lambda *args: None

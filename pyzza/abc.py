@@ -1,9 +1,10 @@
 import struct
+import copy
 from operator import itemgetter
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 from .tags import Tag, TAG_DoABC
-from .io import ABCStream
+from .io import DummyABCStream, ABCStream, uint
 
 class Offset(int): pass
 class Register(int): pass
@@ -307,7 +308,7 @@ class TraitsInfo(ABCStruct):
     @classmethod
     def read(cls, stream, index):
         self = cls()
-        self.name = index.get_string(stream.read_u30())
+        self.name = index.get_multiname(stream.read_u30())
         byte = stream.read_u8()
         self.kind = byte & 15
         self.attr = byte >> 4
@@ -329,7 +330,7 @@ class TraitsInfo(ABCStruct):
         return self
 
     def write(self, stream, index):
-        stream.write_u30(index.get_string_index(self.name))
+        stream.write_u30(index.get_multiname_index(self.name))
         if hasattr(self, 'metadata'):
             self.attr |= self.ATTR_Metadata
         else:
@@ -342,6 +343,9 @@ class TraitsInfo(ABCStruct):
             stream.write_u30(len(self.metadata))
             for m in self.metadata:
                 stream.write_u30(index.get_metadata_index(m))
+
+    def __repr__(self):
+        return '<Trait {}:{} {}>'.format(self.name, self.kind, self.data)
 
 class TraitMethod(ABCStruct):
 
@@ -423,11 +427,12 @@ class MethodBodyInfo(ABCStruct):
     def write(self, stream, index):
         with index.for_method(self) as mindex:
             bcode, self.code = bytecode.assemble(self.bytecode, mindex)
-        lindex = dict((label, index)
-            for (index, label) in bcode
-            if isinstance(label, bytecode.Label))
-        for exc in self.exception_info:
-            exc.get_labels(lindex)
+        if not isinstance(stream, DummyABCStream):
+            lindex = dict((label, index)
+                for (index, label) in bcode
+                if isinstance(label, bytecode.Label))
+            for exc in self.exception_info:
+                exc.get_labels(lindex)
         stream.write_u30(index.get_method_index(self.method))
         stream.write_u30(self.max_stack)
         stream.write_u30(self.local_count)
@@ -764,6 +769,8 @@ class Index(object):
             return CONSTANT_Undefined, 0
         elif isinstance(value, float):
             return CONSTANT_Double, self.get_double_index(value)
+        elif isinstance(value, uint):
+            return CONSTANT_Uint, self.get_uinteger_index(value)
         elif isinstance(value, int):
             return CONSTANT_Int, self.get_integer_index(value)
         elif isinstance(value, str):
@@ -776,6 +783,110 @@ class Index(object):
 
     def __exit__(self, A, B, C):
         del self.cpool
+        del self._method
+
+class IndexCreator(object):
+    def __init__(self, data):
+        self.data = data
+        self.strings = Counter()
+        self.integers = Counter()
+        self.uintegers = Counter()
+        self.doubles = Counter()
+        self.multinames = Counter()
+        self.namespaces = Counter()
+        self.namespace_sets = Counter()
+        self.metadata = Counter()
+
+    def update(self, data):
+        data.constant_pool.integer = list(map(itemgetter(0),
+            self.integers.most_common()))
+        data.constant_pool.double = list(map(itemgetter(0),
+            self.doubles.most_common()))
+        data.constant_pool.string = list(map(itemgetter(0),
+            self.strings.most_common()))
+        data.constant_pool.multiname_info = list(map(itemgetter(0),
+            self.multinames.most_common()))
+        data.constant_pool.namespace_info = list(map(itemgetter(0),
+            self.namespaces.most_common()))
+        data.constant_pool.ns_set_info = list(map(itemgetter(0),
+            self.namespace_sets.most_common()))
+        data.metadata_info = list(map(itemgetter(0),
+            self.metadata.most_common()))
+
+    def get_string_index(self, value):
+        self.strings[value] += 1
+        return 0
+
+    def get_integer_index(self, value):
+        self.integers[value] += 1
+        return 0
+
+    def get_uinteger_index(self, value):
+        self.uintegers[value] += 1
+        return 0
+
+    def get_multiname_index(self, value):
+        if isinstance(value, AnyType):
+            return 0
+        self.multinames[value] += 1
+        return 0
+
+    def get_namespace_index(self, value):
+        self.namespaces[value] += 1
+        return 0
+
+    def get_namespace_set_index(self, value):
+        self.namespace_sets[value] += 1
+        return 0
+
+    def get_double_index(self, value):
+        self.doubles[value] += 1
+        return 0
+
+    def get_method_index(self, meth):
+        return self.data.method_info.index(meth)
+
+    def get_class_index(self, cls):
+        return self.data.class_info.index(cls)
+
+    def get_metadata_index(self, value):
+        return 0
+
+    def for_method(self, method):
+        self._method = method
+        return self
+
+    def get_exception_info(self, index):
+        return self._method.exception_info[index]
+
+    def get_exception_info_index(self, value):
+        return self._method.exception_info.index(value)
+
+    def get_constant_index(self, value):
+        if value is True:
+            return CONSTANT_True, 0
+        elif value is False:
+            return CONSTANT_False, 0
+        elif value is None:
+            return CONSTANT_Null, 0
+        elif isinstance(value, Undefined):
+            return CONSTANT_Undefined, 0
+        elif isinstance(value, float):
+            return CONSTANT_Double, self.get_double_index(value)
+        elif isinstance(value, uint):
+            return CONSTANT_Uint, self.get_uinteger_index(value)
+        elif isinstance(value, int):
+            return CONSTANT_Int, self.get_integer_index(value)
+        elif isinstance(value, str):
+            return CONSTANT_Utf8, self.get_string_index(value)
+        else:
+            return value.kind, self.get_namespace_index(value)
+
+    def __enter__(self):
+        assert self._method
+        return self
+
+    def __exit__(self, A, B, C):
         del self._method
 
 class ABCFile(ABCStruct):
@@ -810,7 +921,12 @@ class ABCFile(ABCStruct):
         return self
 
     def write(self, stream):
-        index = Index(self)
+        index = IndexCreator(self)
+        self._write(DummyABCStream(), index)
+        index.update(self)
+        self._write(stream, Index(self))
+
+    def _write(self, stream, index):
         stream.write_u16(self.minor_version)
         stream.write_u16(self.major_version)
         self.constant_pool.write(stream, index)
