@@ -128,6 +128,9 @@ def get_options():
     op.add_option('-p', '--print-tags',
         help='Print tags while decoding SWF file',
         dest="print_tags", default=False, action="store_true")
+    op.add_option('-P', '--print-abcfile',
+        help='Print abcFile structure while decoding SWF file',
+        dest="print_abcfile", default=False, action="store_true")
     op.add_option('-d', '--disassemble',
         help='Print bytecode disassemble while decoding ABC',
         dest="print_dis", default=False, action="store_true")
@@ -162,6 +165,9 @@ def main():
             taglist.append(tag)
             if options.print_tags:
                 print(tag)
+            if options.print_abcfile and isinstance(tag, tags.DoABC):
+                from . import pretty
+                pretty.pprint(tag.real_body)
             if options.print_dis and hasattr(tag, 'disassemble'):
                 tag.disassemble()
 

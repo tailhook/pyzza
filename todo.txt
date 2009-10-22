@@ -7,7 +7,6 @@ Fill global namespace
 Write debugging info
 Implement stack size calculation
 Make syntax error reporting even better
-Allow other methods
 Allow other classes
 Allow other files
 Try merging several DoABC tags for optimization

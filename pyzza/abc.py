@@ -20,7 +20,17 @@ class Undefined(object):
             return undefined
 
 class ABCStruct(object):
-    pass
+    def __pretty__(self, p, cycle):
+        if cycle:
+            return '{}(...)'.format(self.__class__.__name__)
+        else:
+            with p.group(4, self.__class__.__name__ + '(', ')'):
+                for (idx, (k, v)) in enumerate(self.__dict__.items()):
+                    if idx:
+                        p.text(',')
+                        p.breakable()
+                    p.text(k + '=')
+                    p.pretty(v)
 
 class CPoolInfo(ABCStruct):
 
@@ -383,13 +393,16 @@ class TraitsInfo(ABCStruct):
         return '<Trait {}:{} {}>'.format(self.name, self.kind, self.data)
 
 class TraitMethod(ABCStruct):
+    kind = 1
+
+    def __init__(self, method, disp_id=0):
+        self.disp_id = disp_id
+        self.method = method
 
     @classmethod
     def read(cls, stream, index):
-        self = cls()
-        self.disp_id = stream.read_u30()
-        self.method = index.get_method(stream.read_u30())
-        return self
+        disp_id = stream.read_u30()
+        return cls(index.get_method(stream.read_u30()), disp_id=disp_id)
 
     def write(self, stream, index):
         stream.write_u30(self.disp_id)

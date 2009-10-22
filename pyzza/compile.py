@@ -52,7 +52,18 @@ class CodeHeader:
         inst.flags = 0
         inst.interface = []
         inst.iinit = frag.namespace['__init__'].code_fragment._method_info
-        inst.trait = []
+        traits = []
+        for (k, m) in frag.namespace.items():
+            if k == '__init__': continue
+            if isinstance(m, Method):
+                traits.append(abc.TraitsInfo(
+                    abc.QName(abc.NSPackage(package), k),
+                    abc.TraitMethod(m.code_fragment._method_info)))
+            elif isinstance(m, Register):
+                pass #nothing needed
+            else:
+                raise NotImplementedError(m)
+        inst.trait = traits
         self.tag.real_body.class_info.append(cls)
         return cls
 
