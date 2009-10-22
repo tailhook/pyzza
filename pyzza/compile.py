@@ -102,6 +102,10 @@ class NewClass(NameType):
         self.code_fragment = frag
         self.class_info = clsinfo
 
+    @property
+    def property_name(self):
+        return self.class_info.instance_info.name
+
 class Register(NameType):
     """Register reference, can have register number or can have no number"""
     def __init__(self, value=None):
@@ -155,6 +159,7 @@ class CodeFragment:
         parser.Name: 'varname',
         parser.String: 'string',
         parser.CallAttr: 'callattr',
+        parser.GetAttr: 'getattr',
         parser.Super: 'super',
         parser.Add: 'add',
         parser.Subtract: 'subtract',
@@ -182,6 +187,9 @@ class CodeFragment:
             bytecode.pushscope(),
             ]
         self.namespace = {}
+        for (idx, name) in enumerate(arguments):
+            if name:
+                self.namespace[name] = Register(idx)
         self.private_namespace = private_namespace
         self.package_namespace = package_namespace
         self.method_prefix = method_prefix or private_namespace + ':'
@@ -241,11 +249,12 @@ class CodeFragment:
 
     def visit_class(self, node):
         package = ''
-        for i in node.decorators:
-            if i.name.value == 'package':
-                package = i.arguments[0].value
-            else:
-                raise NotImplementedError("No decorator ``{}''".format(i.name))
+        if node.decorators:
+            for i in node.decorators:
+                if i.name.value == 'package':
+                    package = i.arguments[0].value
+                else:
+                    raise NotImplementedError("No decorator ``{}''".format(i.name))
         frag = CodeFragment(node.body, self.library, self.code_header,
             private_namespace=self.private_namespace,
             parent_namespaces=(self,) + self.parent_namespaces,
@@ -253,7 +262,10 @@ class CodeFragment:
             class_name=node.name.value)
         self.code_header.add_method_body('', frag)
         assert len(node.bases) <= 1
-        val = self.find_name(node.bases[0].value).cls
+        if not node.bases:
+            val = self.library.get_class('', 'Object')
+        else:
+            val = self.find_name(node.bases[0].value).cls
         bases = []
         while val:
             bases.append(val)
@@ -363,6 +375,11 @@ class CodeFragment:
         self.bytecodes.append(bytecode.callproperty(
             abc.QName(abc.NSPackage(''), node.attribute.value),
             len(node.arguments)))
+
+    def visit_getattr(self, node):
+        self.push_value(node.expr)
+        self.bytecodes.append(bytecode.getproperty(
+            abc.QName(abc.NSPackage(''), node.name.value)))
 
     def visit_super(self, node):
         if node.method.value == '__init__':

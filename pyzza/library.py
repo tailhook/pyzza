@@ -30,7 +30,7 @@ class Library:
 
     def get_class(self, package, name):
         if (package, name) in self.class_cache:
-            return self.class_cache
+            return self.class_cache[package, name]
         for head in self.code_headers:
             for (idx, cls) in enumerate(head.class_info):
                 qname = cls.instance_info.name

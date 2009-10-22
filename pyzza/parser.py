@@ -145,7 +145,11 @@ class Class(Node):
     __slots__ = ('decorators', 'name', 'bases', 'body')
     def __init__(self, children, context):
         self.decorators = None
-        _class, self.name, self.bases, self.body = children
+        if len(children) < 4:
+            _class, self.name, self.body = children
+            self.bases = []
+        else:
+            _class, self.name, self.bases, self.body = children
         assert _class.value == 'class'
         super().__init__(context)
     @property
@@ -404,6 +408,7 @@ symbols = {
     symbol.or_test: Term,
     symbol.test: Test,
     symbol.argument: Skip,
+    symbol.pass_stmt: Skip,
     symbol.arglist: List,
     symbol.typedargslist: List,
     symbol.parameters: Skip,

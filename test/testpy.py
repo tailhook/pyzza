@@ -2,6 +2,10 @@ from flash.display import Sprite
 from flash.text import TextField
 from flash.text import TextFormat
 
+class Test:
+    def __init__(self):
+        self.value = 'hello'
+
 @package('')
 class Main(Sprite):
 
@@ -14,5 +18,5 @@ class Main(Sprite):
         label.background = True
         label.border = True
         label.defaultTextFormat = TextFormat('Courier New', 24)
-        label.text = (2*3 + 4)/12
+        label.text = Test().value
         self.addChild(label)
