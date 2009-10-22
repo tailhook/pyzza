@@ -720,6 +720,7 @@ class Index(object):
     def get_string_index(self, value):
         #~ if value == '':
             #~ return 0
+        assert isinstance(value, str), "Value {!r} is not string".format(value)
         return self.cpool.string.index(value)+1
 
     def get_integer(self, index):

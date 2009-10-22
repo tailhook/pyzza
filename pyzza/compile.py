@@ -136,12 +136,12 @@ class CodeFragment:
     are all here.
     """
     visitors = {
-        parser.FromImport: 'import',
+        parser.ImportStmt: 'import',
         parser.Class: 'class',
-        parser.Def: 'function',
+        parser.Func: 'function',
         parser.Assign: 'assign',
         parser.Call: 'call',
-        str: 'varname',
+        parser.Name: 'varname',
         parser.String: 'string',
         parser.CallAttr: 'callattr',
         parser.Super: 'super',
@@ -216,32 +216,33 @@ class CodeFragment:
     ##### Visitors #####
 
     def visit_import(self, node):
-        package = '.'.join(node[0])
-        name = node[1]
-        cls = self.library.get_class(package, name)
-        assert name not in self.namespace
-        self.namespace[name] = Class(cls)
+        for name in node.names:
+            package = node.module.value
+            name = name.value
+            cls = self.library.get_class(package, name)
+            assert name not in self.namespace
+            self.namespace[name] = Class(cls)
 
     def visit_class(self, node):
         package = ''
-        for i in node.decorator:
-            if i[0] == 'package':
-                package = i[1][0][0][0][1:-1]
+        for i in node.decorators:
+            if i.name.value == 'package':
+                package = i.arguments[0].value
             else:
-                raise NotImplementedError("No decorator ``{}''".format(i[0]))
+                raise NotImplementedError("No decorator ``{}''".format(i.name))
         frag = CodeFragment(node.body, self.library, self.code_header,
             private_namespace=self.private_namespace,
             parent_namespaces=(self,) + self.parent_namespaces,
             package_namespace=package,
-            class_name=node.name[0])
+            class_name=node.name.value)
         self.code_header.add_method_body('', frag)
         assert len(node.bases) <= 1
-        val = self.find_name(node.bases[0]).cls
+        val = self.find_name(node.bases[0].value).cls
         bases = []
         while val:
             bases.append(val)
             val = val.get_base()
-        cls = self.code_header.add_class(node.name[0], bases, frag,
+        cls = self.code_header.add_class(node.name.value, bases, frag,
             package=package)
         self.bytecodes.append(bytecode.getscopeobject(0))
         for i in reversed(bases):
@@ -252,8 +253,8 @@ class CodeFragment:
         for i in range(len(bases)):
             self.bytecodes.append(bytecode.popscope())
         self.bytecodes.append(bytecode.initproperty(
-            abc.QName(abc.NSPackage(package), node.name[0])))
-        self.namespace[node.name[0]] = NewClass(frag, cls)
+            abc.QName(abc.NSPackage(package), node.name.value)))
+        self.namespace[node.name.value] = NewClass(frag, cls)
 
     def visit_function(self, node):
         if self.class_name is not None:
@@ -261,48 +262,50 @@ class CodeFragment:
                 parent_namespaces=(self,) + self.parent_namespaces,
                 private_namespace=self.private_namespace,
                 arguments=('self',))
-            self.namespace[node.name[0]] = Method(frag)
+            self.namespace[node.name.value] = Method(frag)
         else:
             frag = CodeFragment(node.body, self.library, self.code_header,
                 private_namespace=self.private_namespace,
                 parent_namespaces=self.parent_namespaces,
                 method_prefix=self.method_prefix+self.private_namespace+':')
             self.namespace[node.name[0]] = Function(frag)
-        self.code_header.add_method_body(self.method_prefix+node.name[0], frag)
+        self.code_header.add_method_body(self.method_prefix+node.name.value, frag)
 
     def visit_assign(self, node):
-        if isinstance(node[0], str):
-            if node[0] not in self.namespace:
-                reg = self.namespace[node[0]] = Register()
+        if isinstance(node.target, parser.Name):
+            if node.target.value not in self.namespace:
+                reg = self.namespace[node.target.value] = Register()
             else:
                 reg = self.namespace[node[0]]
-        elif isinstance(node[0], parser.GetAttr):
-            self.push_value(node[0][0])
+        elif isinstance(node.target, parser.GetAttr):
+            self.push_value(node.target.expr)
         else:
-            raise NotImplementedError(node[0])
-        self.push_value(node[1])
-        if isinstance(node[0], str):
+            raise NotImplementedError(node.target)
+        self.push_value(node.expr)
+        if isinstance(node.target, parser.Name):
             self.bytecodes.append(bytecode.setlocal(reg))
-        elif isinstance(node[0], parser.GetAttr):
+        elif isinstance(node.target, parser.GetAttr):
             self.bytecodes.append(bytecode.setproperty(
-                abc.QName(abc.NSPackage(self.package_namespace), node[0][1][0])))
+                abc.QName(abc.NSPackage(self.package_namespace),
+                node.target.name.value)))
         else:
-            raise NotImplementedError(node[0])
+            raise NotImplementedError(node.target)
 
     def visit_call(self, node):
-        name = node[0]
-        if isinstance(name, str):
+        name = node.expr
+        if isinstance(name, parser.Name):
+            name = name.value
             val = self.find_name(name)
             self.bytecodes.append(bytecode.findpropstrict(val.property_name))
-            if len(node[1]) > 0:
-                raise NotImplementedError("No arguments for constructor "
-                    "supported")
-            self.bytecodes.append(bytecode.constructprop(val.property_name, 0))
+            for i in node.arguments:
+                self.push_value(i)
+            self.bytecodes.append(bytecode.constructprop(val.property_name,
+                len(node.arguments)))
         else:
             raise NotImplementedError(name)
 
     def visit_varname(self, node):
-        name = node
+        name = node.value
         if name == 'self': #TODO: remove this silly thing
             return self.bytecodes.append(bytecode.getlocal_0())
         for ns in chain((self,), self.parent_namespaces):
@@ -322,34 +325,25 @@ class CodeFragment:
             raise NotImplementedError(val)
 
     def visit_string(self, node):
-        val = node[0]
-        if val[0] == '"':
-            assert val[-1] == '"'
-            val = val[1:-1]
-        elif val[0] == "'":
-            assert val[-1] == "'"
-            val = val[1:-1]
-        else:
-            raise NotImplementedError(val)
-        self.bytecodes.append(bytecode.pushstring(val))
+        self.bytecodes.append(bytecode.pushstring(node.value))
 
     def visit_double(self, node):
         self.bytecodes.append(bytecode.pushdouble(node))
 
     def visit_callattr(self, node):
-        self.push_value(node[0])
-        for i in node[2]:
+        self.push_value(node.expr)
+        for i in node.arguments:
             self.push_value(i)
         self.bytecodes.append(bytecode.callproperty(
-            abc.QName(abc.NSPackage(''), node[1]), len(node[2])))
+            abc.QName(abc.NSPackage(''), node.attribute.value),
+            len(node.arguments)))
 
     def visit_super(self, node):
-        if node[0] == '__init__':
-            if len(node[1][0]) > 0:
-                raise NotImplementedError("No arguments for super constructor "
-                    "supported")
+        if node.method.value == '__init__':
+            for i in node.arguments:
+                self.push_value(i)
             self.bytecodes.append(bytecode.getlocal_0())
-            self.bytecodes.append(bytecode.constructsuper(0))
+            self.bytecodes.append(bytecode.constructsuper(len(node.arguments)))
         else:
             if len(node[1][0]) > 0:
                 raise NotImplementedError("No arguments for super call "
@@ -374,7 +368,7 @@ def main():
     if len(args) != 1:
         op.error("Exacly one argument expected")
     from . import parser, library
-    ast = parser.parse_file(args[0])
+    ast = parser.parser().parse_file(args[0])
     lib = library.Library()
     for i in options.libraries:
         lib.add_file(i)

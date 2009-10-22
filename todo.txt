@@ -1,0 +1,13 @@
+Fix self
+Make `push_value` analog for void result
+Fix call of super and constructors (seems done, but check please)
+Implement compilation of all node types (arithmetics, etc.)
+Implement branch nodes (conditions, loops, etc.)
+Fill global namespace
+Write debugging info
+Implement stack size calculation
+Make syntax error reporting even better
+Allow other methods
+Allow other classes
+Allow other files
+Try merging several DoABC tags for optimization
