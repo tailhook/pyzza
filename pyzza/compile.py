@@ -145,7 +145,12 @@ class CodeFragment:
         parser.String: 'string',
         parser.CallAttr: 'callattr',
         parser.Super: 'super',
-        float: 'double',
+        parser.Add: 'add',
+        parser.Subtract: 'subtract',
+        parser.Multiply: 'multiply',
+        parser.Divide: 'divide',
+        parser.Modulo: 'modulo',
+        parser.Number: 'number',
         }
     max_stack = 10 # TODO: fix
     local_count = 10 # TODO: fix
@@ -327,8 +332,18 @@ class CodeFragment:
     def visit_string(self, node):
         self.bytecodes.append(bytecode.pushstring(node.value))
 
-    def visit_double(self, node):
-        self.bytecodes.append(bytecode.pushdouble(node))
+    def visit_number(self, node):
+        if isinstance(node.value, float):
+            self.bytecodes.append(bytecode.pushdouble(node.value))
+        elif isinstance(node.value, int):
+            if node.value < 256:
+                self.bytecodes.append(bytecode.pushbyte(node.value))
+            elif node.value < 65536:
+                self.bytecodes.append(bytecode.pushshort(node.value))
+            else:
+                self.bytecodes.append(bytecode.pushinteger(node.value))
+        else:
+            raise NotImplementedError(node)
 
     def visit_callattr(self, node):
         self.push_value(node.expr)
@@ -349,6 +364,33 @@ class CodeFragment:
                 raise NotImplementedError("No arguments for super call "
                     "supported")
             self.bytecodes.append(bytecode.construct(0))
+
+    ##### Math #####
+
+    def visit_add(self, node):
+        self.push_value(node.left)
+        self.push_value(node.right)
+        self.bytecodes.append(bytecode.add())
+
+    def visit_subtract(self, node):
+        self.push_value(node.left)
+        self.push_value(node.right)
+        self.bytecodes.append(bytecode.subtract())
+
+    def visit_multiply(self, node):
+        self.push_value(node.left)
+        self.push_value(node.right)
+        self.bytecodes.append(bytecode.multiply())
+
+    def visit_divide(self, node):
+        self.push_value(node.left)
+        self.push_value(node.right)
+        self.bytecodes.append(bytecode.divide())
+
+    def visit_modulo(self, node):
+        self.push_value(node.left)
+        self.push_value(node.right)
+        self.bytecodes.append(bytecode.modulo())
 
 def get_options():
     import optparse

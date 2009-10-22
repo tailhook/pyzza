@@ -83,6 +83,20 @@ class String(Leaf):
     def __repr__(self):
         return '<String {!r}>'.format(self.value)
 
+class Number(Leaf):
+    __slots__ = ()
+    def __init__(self, value, context):
+        if '.' in value:
+            value = float(value)
+        else:
+            value = int(value)
+        super().__init__(value, context)
+    def _rep(self, val):
+        return val.replace(r'\"', '"').replace(r"\'", "'")\
+            .replace(r'\r', '\r').replace(r'\n', '\n')
+    def __repr__(self):
+        return '<String {!r}>'.format(self.value)
+
 class DottedName(Leaf):
     __slots__ = ('parts',)
     def __init__(self, children, context):
@@ -218,11 +232,49 @@ def Test(child, ctx):
         return child[0]
     raise NotImplementedError(child)
 
+def GenExp(child, ctx):
+    if len(child) < 2:
+        return child[0]
+    raise NotImplementedError(child)
+
+class Binary(Node):
+    __slots__ = ('left', 'right')
+    def __init__(self, left, right, context):
+        self.left = left
+        self.right = right
+        super().__init__(context)
+    @property
+    def children(self):
+        yield self.left
+        yield self.right
+class Add(Binary):
+    __slots__ = ()
+class Subtract(Binary):
+    __slots__ = ()
+class Multiply(Binary):
+    __slots__ = ()
+class Divide(Binary):
+    __slots__ = ()
+class Modulo(Binary):
+    __slots__ = ()
+
+operators = {
+    '+': Add,
+    '-': Subtract,
+    '*': Multiply,
+    '/': Divide,
+    '%': Modulo,
+    }
 def Term(child, ctx):
     """Any binary operators are here. Precedence is handled by parser"""
     if len(child) < 2:
         return child[0]
-    raise NotImplementedError(child)
+    it = iter(child)
+    pre = next(it)
+    for op in it:
+        nex = next(it)
+        pre = operators[op.value](pre, nex, ('', (op.lineno, op.col)))
+    return pre
 
 def Decorated(child, ctx):
     assert not child[1].decorators
@@ -321,6 +373,12 @@ tokens = {
     token.DEDENT: Nop,
     token.ENDMARKER: Nop,
     token.EQUAL: Op,
+    token.PLUS: Op,
+    token.MINUS: Op,
+    token.STAR: Op,
+    token.NUMBER: Number,
+    token.SLASH: Op,
+    token.COMMA: Nop,
     }
 
 symbols = {
@@ -365,6 +423,7 @@ symbols = {
     symbol.funcdef: Func,
     symbol.classdef: Class,
     symbol.decorated: Decorated,
+    symbol.testlist_gexp: GenExp,
     symbol.file_input: FileInput,
     }
 
