@@ -1,5 +1,5 @@
 from itertools import chain, count
-from operator import methodcaller
+from operator import methodcaller, attrgetter
 from collections import Counter
 
 from . import parser, library, swf, bytecode, abc, tags
@@ -187,9 +187,6 @@ class CodeFragment:
             bytecode.pushscope(),
             ]
         self.namespace = {}
-        for (idx, name) in enumerate(arguments):
-            if name:
-                self.namespace[name] = Register(idx)
         self.private_namespace = private_namespace
         self.package_namespace = package_namespace
         self.method_prefix = method_prefix or private_namespace + ':'
@@ -210,15 +207,21 @@ class CodeFragment:
         for bcode in self.bytecodes:
             for (name, typ, _, _) in bcode.format:
                 if issubclass(typ, bytecode.Register):
-                    rcount[getattr(bcode, name)] += 1
+                    r = getattr(bcode, name)
+                    if r.value is None:
+                        rcount[r] += 1
         regs = {}
-        for (idx, (name, val)) in zip(count(1), rcount.most_common()):
+        for (idx, (name, val)) in zip(count(len(self.arguments)), rcount.most_common()):
             regs[name] = idx
         for bcode in self.bytecodes:
             for (name, typ, _, _) in bcode.format:
                 if issubclass(typ, bytecode.Register):
                     rname = getattr(bcode, name)
-                    setattr(bcode, name, bytecode.Register(regs[rname]))
+                    if rname.value is None:
+                        rval = regs[rname]
+                    else:
+                        rval = rname.value
+                    setattr(bcode, name, bytecode.Register(rval))
 
     ##### Utility #####
 
@@ -289,7 +292,7 @@ class CodeFragment:
             frag = CodeFragment(node.body, self.library, self.code_header,
                 parent_namespaces=(self,) + self.parent_namespaces,
                 private_namespace=self.private_namespace,
-                arguments=('self',))
+                arguments=list(map(attrgetter('value'), node.arguments)))
             self.namespace[node.name.value] = Method(frag)
         else:
             frag = CodeFragment(node.body, self.library, self.code_header,
@@ -334,8 +337,6 @@ class CodeFragment:
 
     def visit_varname(self, node):
         name = node.value
-        if name == 'self': #TODO: remove this silly thing
-            return self.bytecodes.append(bytecode.getlocal_0())
         for ns in chain((self,), self.parent_namespaces):
             if name in ns.namespace:
                 break
