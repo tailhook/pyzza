@@ -101,6 +101,7 @@ class NewClass(NameType):
     def __init__(self, frag, clsinfo):
         self.code_fragment = frag
         self.class_info = clsinfo
+        self.cls = frag.library.add_class(clsinfo)
 
     @property
     def property_name(self):
@@ -167,6 +168,7 @@ class CodeFragment:
         parser.Divide: 'divide',
         parser.Modulo: 'modulo',
         parser.Number: 'number',
+        parser.Return: 'return',
         }
     max_stack = 10 # TODO: fix
     local_count = 10 # TODO: fix
@@ -270,6 +272,7 @@ class CodeFragment:
         else:
             val = self.find_name(node.bases[0].value).cls
         bases = []
+        print(bases, node.bases, val)
         while val:
             bases.append(val)
             val = val.get_base()
@@ -384,15 +387,19 @@ class CodeFragment:
 
     def visit_super(self, node):
         if node.method.value == '__init__':
+            self.bytecodes.append(bytecode.getlocal_0())
             for i in node.arguments:
                 self.push_value(i)
-            self.bytecodes.append(bytecode.getlocal_0())
             self.bytecodes.append(bytecode.constructsuper(len(node.arguments)))
         else:
             if len(node[1][0]) > 0:
                 raise NotImplementedError("No arguments for super call "
                     "supported")
             self.bytecodes.append(bytecode.construct(0))
+
+    def visit_return(self, node):
+        self.push_value(node.expr)
+        self.bytecodes.append(bytecode.returnvalue())
 
     ##### Math #####
 

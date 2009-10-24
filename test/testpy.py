@@ -2,9 +2,15 @@ from flash.display import Sprite
 from flash.text import TextField
 from flash.text import TextFormat
 
-class Hello:
+class Base:
     def __init__(self, value):
-        self.value = 'Hello ' + value
+        self.value = self.prefix() + value
+
+class Hello(Base):
+    def __init__(self, value):
+        super().__init__(value)
+    def prefix(self):
+        return 'Hello '
 
 @package('')
 class Main(Sprite):

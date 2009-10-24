@@ -36,6 +36,7 @@ class Library:
                 qname = cls.instance_info.name
                 if name == qname.name and qname.namespace.name == package:
                     res = AS3Class(qname, self,
+                        class_info=cls,
                         index=idx,
                         header=head,
                         )
@@ -44,22 +45,31 @@ class Library:
         else:
             raise ClassNotFoundError(package, name)
 
+    def add_class(self, clsinfo):
+        name = clsinfo.instance_info.name
+        val = self.class_cache[name.namespace.name, name.name] = AS3Class(
+            name, self,
+            class_info=clsinfo,
+            )
+        return val
+
 class AS3Class:
 
-    def __init__(self, qname, lib, header, index):
+    def __init__(self, qname, lib, class_info, header=None, index=None):
         self.name = qname
         self.library = ref(lib)
+        self.class_info = class_info
         self.header = header
         self.index = index
 
     def __repr__(self):
         return '<{} {}:{} from {}:{}>'.format(self.__class__.__name__,
             self.name.namespace.name, self.name.name,
-            self.header._source, self.index)
+            self.header and self.header._source, self.index)
 
     def get_base(self):
         lib = self.library()
-        sn = self.header.class_info[self.index].instance_info.super_name
+        sn = self.class_info.instance_info.super_name
         if isinstance(sn, abc.AnyType):
             return None
         return lib.get_class(sn.namespace.name, sn.name)

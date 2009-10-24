@@ -1,6 +1,6 @@
-Fix self
 Make `push_value` analog for void result
 Fix call of super and constructors (seems done, but check please)
+Make overridable methods
 Implement compilation of all node types (arithmetics, etc.)
 Implement branch nodes (conditions, loops, etc.)
 Fill global namespace

@@ -108,6 +108,16 @@ class DottedName(Leaf):
 class Op(Leaf):
     __slots__ = ()
 
+class Return(Node):
+    __slots__ = ('expr',)
+    def __init__(self, children, context):
+        _return, self.expr = children
+        assert _return.value == 'return', _return
+        super().__init__(context)
+    @property
+    def children(self):
+        yield self.expr
+
 class ImportStmt(Node):
     __slots__ = ('module', 'names')
     def __init__(self, children, context):
@@ -427,7 +437,9 @@ symbols = {
     symbol.expr_stmt: _Assign,
     symbol.funcdef: Func,
     symbol.classdef: Class,
+    symbol.flow_stmt: Skip,
     symbol.decorated: Decorated,
+    symbol.return_stmt: Return,
     symbol.testlist_gexp: GenExp,
     symbol.file_input: FileInput,
     }
