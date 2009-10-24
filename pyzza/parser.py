@@ -25,6 +25,8 @@ class Node(object):
         return iter(self.children)
     def __getitem__(self, index):
         return self.children[index]
+    def __len__(self):
+        return len(self.children)
     def __pretty__(self, p, cycle):
         if cycle:
             return '{}(...)'.format(self.__class__.__name__)
@@ -118,6 +120,20 @@ class Return(Node):
     def children(self):
         yield self.expr
 
+class Break(Node):
+    __slots__ = ()
+    def __init__(self, children, context):
+        _break, = children
+        assert _break.value == 'break', _break
+        super().__init__(context)
+
+class Continue(Node):
+    __slots__ = ()
+    def __init__(self, children, context):
+        _continue, = children
+        assert _continue.value == 'continue', _continue
+        super().__init__(context)
+
 class ImportStmt(Node):
     __slots__ = ('module', 'names')
     def __init__(self, children, context):
@@ -145,14 +161,36 @@ class If(Node):
         super().__init__(context)
     @property
     def children(self):
-        yield self.module
-        yield self.names
+        for (k, v) in self.ifs:
+            yield k
+            yield v
+        if self.else_:
+            yield self.else_
+
+class For(Node):
+    __slots__ = ('var', 'expr', 'body', 'else_')
+    def __init__(self, children, context):
+        _for, self.var, _in, self.expr, self.body = children[:5]
+        self.else_ = None
+        assert _for.value == 'for', _for
+        assert _in.value == 'in', _in
+        if len(children) > 5:
+            _else, self.else_ = children[5:]
+            assert _else.value == 'else', _else
+        super().__init__(context)
+    @property
+    def children(self):
+        yield self.var
+        yield self.expr
+        yield self.body
+        if self.else_:
+            yield self.else_
 
 class Assign(Node):
-    __slots__ = ('target', 'expr')
+    __slots__ = ('target', 'operator', 'expr')
     def __init__(self, children, context):
-        self.target, _eq, self.expr = children
-        assert _eq.value == '=', _eq
+        self.target, self.operator, self.expr = children
+        assert self.operator.value[-1] == '=', self.operator
         super().__init__(context)
     @property
     def children(self):
@@ -415,6 +453,7 @@ tokens = {
     token.SLASH: Op,
     token.COMMA: Nop,
     token.GREATER: Op,
+    token.PLUSEQUAL: Op,
     }
 
 symbols = {
@@ -425,6 +464,7 @@ symbols = {
     symbol.small_stmt: Skip,
     symbol.simple_stmt: Skip,
     symbol.stmt: Skip,
+    symbol.augassign: Skip,
     symbol.atom: Atom,
     symbol.power: Power,
     symbol.factor: Factor,
@@ -457,11 +497,14 @@ symbols = {
     symbol.trailcall: Call,
     symbol.trailered: Trailered,
     symbol.testlist: _Tuple,
+    symbol.exprlist: Tuple,
     symbol.expr_stmt: _Assign,
     symbol.funcdef: Func,
     symbol.classdef: Class,
     symbol.flow_stmt: Skip,
     symbol.if_stmt: If,
+    symbol.for_stmt: For,
+    symbol.break_stmt: Break,
     symbol.decorated: Decorated,
     symbol.return_stmt: Return,
     symbol.testlist_gexp: GenExp,

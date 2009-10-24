@@ -3,11 +3,15 @@ from flash.text import TextField
 from flash.text import TextFormat
 
 class Hello:
-    def __init__(self):
-        if Math.random() > 0.5:
-            self.text = "Hello"
+    def __init__(self, value):
+        self.text = "VAL: " + value + "\n"
+        for i in range(value):
+            self.text = self.text + "Hello!\n"
+            if i > 3:
+                self.text += "..."
+                break
         else:
-            self.text = "Shit"
+            self.text += "----"
 
 @package('')
 class Main(Sprite):
@@ -20,5 +24,5 @@ class Main(Sprite):
         label = TextField()
         label.background = True
         label.border = True
-        label.text = Hello().text
+        label.text = Hello(Math.round(Math.random()*6)).text
         self.addChild(label)

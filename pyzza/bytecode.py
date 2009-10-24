@@ -108,12 +108,15 @@ class JumpBytecode(Bytecode):
         )
 
 class Label(object): # pseudo-bytecode
-    __slots__ = ()
+    __slots__ = ('_verify_stack',)
     format = ()
     stack_before = ()
     stack_after = ()
     def write(self, stream, index):
         pass
+    def __repr__(self):
+        return '<{}:{:x}[{}]>'.format(self.__class__.__name__, id(self),
+            getattr(self, '_verify_stack', '*'))
 
 class bytecodes(metaclass=gather_bytecodes):
 
@@ -294,7 +297,7 @@ class bytecodes(metaclass=gather_bytecodes):
         def stack_before(self):
             return ('object',) + tuple('arg{}'.format(i)
                 for i in range(self.arg_count))
-        stack_after = ('value',)
+        stack_after = ()
 
     class convert_b(UnaryBytecode):
         code = 0x76
@@ -678,7 +681,7 @@ class bytecodes(metaclass=gather_bytecodes):
         format = (
             ('klass', ClassInfo, 'class', io.u30),
             )
-        stack_before = ('basetype',)
+        stack_before = ('basescope', 'basetype')
         stack_after = ('newclass',)
 
     class newfunction(Bytecode):
@@ -848,7 +851,8 @@ class bytecodes(metaclass=gather_bytecodes):
         format = (
             ('property', MultinameInfo, 'multiname', io.u30),
             )
-        def _stack_before(self):
+        @property
+        def stack_before(self):
             return super()._stack_before() + ('value',)
 
     class setslot(Bytecode):
@@ -935,7 +939,7 @@ class Assembler(object):
                     fwjumps[code.offset].append(index)
                     code.offset = Offset(0)
                 else:
-                    code.offset = memo[code.offset]
+                    code.offset = Offset(memo[code.offset] - index - 4)
             code.write(self._stream, self._index)
             codes.append((index, code))
         assert not fwjumps, 'Not found forward jumps {!r}'.format(fwjumps)
@@ -957,7 +961,7 @@ def _make_labels(codes, ext_labels):
         if isinstance(code, JumpBytecode):
             code = code.__class__(code.offset)
             if code.offset < 0:
-                code.offset = bw[index+3+code.offset] #should land after label
+                code.offset = bw[index+4+code.offset]
             else:
                 nlabel = Label()
                 labels[index+4+code.offset].append(nlabel)

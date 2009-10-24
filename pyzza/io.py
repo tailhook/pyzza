@@ -26,13 +26,13 @@ class ABCStream(BytesIO):
         bytes = self.read(3)
         res = bytes[0] | (bytes[1] << 8) | (bytes[2] << 16)
         if res > (1 << 23):
-            res = -((~res)&((1 << 23)-1))
+            res = -((~res)&((1 << 23)-1))-1
         return res
 
     def write_s24(self, val):
         assert -(1 << 23) < val < (1 << 23)
         if val < 0:
-            val = -val | (1 << 23)
+            val = (1 << 24) + val
         self.write(bytes([val & 0xFF,
             ((val >> 8) & 0xFF),
             val >> 16]))

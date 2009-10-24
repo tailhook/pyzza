@@ -136,12 +136,22 @@ class Function(NameType):
     def __init__(self, frag):
         self.code_fragment = frag
 
+class Builtin(NameType):
+    """Pyzza builtins, usually are inline functions"""
+    def __init__(self, name):
+        self.name = name
+
 ##### End Name Types #####
 
 globals = {
     'True': True,
     'False': False,
     'None': None,
+    'range': Builtin('range'),
+    'keys': Builtin('keys'),
+    'items': Builtin('items'),
+    'values': Builtin('values'),
+    'abs': Builtin('abs'),
     }
 
 class Globals:
@@ -172,6 +182,9 @@ class CodeFragment:
         parser.Number: 'number',
         parser.Return: 'return',
         parser.If: 'if',
+        parser.For: 'for',
+        parser.Break: 'break',
+        parser.Continue: 'continue',
         parser.Greater: 'greater',
         }
     max_stack = None
@@ -193,6 +206,7 @@ class CodeFragment:
             bytecode.pushscope(),
             ]
         self.namespace = {}
+        self.loopstack = [] # pairs of continue label and break label
         self.private_namespace = private_namespace
         self.package_namespace = package_namespace
         self.method_prefix = method_prefix or private_namespace + ':'
@@ -237,9 +251,25 @@ class CodeFragment:
             if stack_size < len(bcode.stack_before):
                 raise StackError("Not enought operands in the stack for "
                     "{!r} (operands: {})".format(bcode, bcode.stack_before))
+            if isinstance(bcode, bytecode.Label):
+                if hasattr(bcode, '_verify_stack'):
+                    if bcode._verify_stack != stack_size:
+                        raise StackError("Unbalanced stack at {!r}".format(bcode))
+                else:
+                    bcode._verify_stack = stack_size
+            old_stack = stack_size
             stack_size += len(bcode.stack_after) - len(bcode.stack_before)
+            if isinstance(bcode, bytecode.JumpBytecode):
+                if hasattr(bcode.offset, '_verify_stack'):
+                    if bcode.offset._verify_stack != stack_size:
+                        raise StackError("Unbalanced stack at {!r}".format(bcode))
+                else:
+                    bcode.offset._verify_stack = stack_size
+            #print('[{:3d} -{:2d}] {}'.format(old_stack, stack_size, bcode))
             if stack_size > max_stack_size:
                 max_stack_size = stack_size
+        if stack_size != 0:
+            raise StackError("Unbalanced stack at the end of code")
         self.max_stack = max_stack_size
 
     ##### Utility #####
@@ -342,14 +372,33 @@ class CodeFragment:
                 reg = self.namespace[node.target.value] = Register()
             else:
                 reg = self.namespace[node[0]]
+            if node.operator.value != '=':
+                self.bytecodes.append(bytecode.getlocal(reg))
         elif isinstance(node.target, parser.GetAttr):
             self.push_value(node.target.expr)
+            if node.operator.value != '=':
+                self.bytecodes.append(bytecode.dup())
+                self.bytecodes.append(bytecode.getproperty(
+                    abc.QName(abc.NSPackage(self.package_namespace),
+                    node.target.name.value)))
         else:
             raise NotImplementedError(node.target)
         self.push_value(node.expr)
         if isinstance(node.target, parser.Name):
+            if node.operator.value == '=':
+                pass
+            elif node.operator.value == '+=':
+                self.bytecodes.append(bytecode.add())
+            else:
+                raise NotImplementedError(node.operator)
             self.bytecodes.append(bytecode.setlocal(reg))
         elif isinstance(node.target, parser.GetAttr):
+            if node.operator.value == '=':
+                pass
+            elif node.operator.value == '+=':
+                self.bytecodes.append(bytecode.add())
+            else:
+                raise NotImplementedError(node.operator)
             self.bytecodes.append(bytecode.setproperty(
                 abc.QName(abc.NSPackage(self.package_namespace),
                 node.target.name.value)))
@@ -456,10 +505,62 @@ class CodeFragment:
             self.exec_suite(node.else_)
         self.bytecodes.append(endlabel)
 
+    def visit_for(self, node, void):
+        assert void == True
+        endlabel = bytecode.Label()
+        if isinstance(node.expr, parser.Call) \
+            and isinstance(node.expr.expr, parser.Name):
+            val = self.find_name(node.expr.expr.value)
+            if isinstance(val, Builtin):
+                if val.name == 'range':
+                    if len(node.expr.arguments) < 2:
+                        assert len(node.var) == 1, node.var
+                        reg = self.namespace[node.var[0].value] = Register()
+                        amountreg = Register()
+                        bodylab = bytecode.label()
+                        contlab = bytecode.Label()
+                        condlab = bytecode.Label()
+                        self.push_value(node.expr.arguments[0])
+                        self.bytecodes.append(bytecode.setlocal(amountreg))
+                        self.bytecodes.append(bytecode.pushbyte(0))
+                        self.bytecodes.append(bytecode.setlocal(reg))
+                        self.bytecodes.append(bytecode.jump(condlab))
+                        self.bytecodes.append(bodylab)
+                        self.loopstack.append((contlab, endlabel))
+                        self.exec_suite(node.body)
+                        self.loopstack.pop()
+                        self.bytecodes.append(contlab)
+                        self.bytecodes.append(bytecode.getlocal(reg))
+                        self.bytecodes.append(bytecode.increment_i())
+                        self.bytecodes.append(bytecode.setlocal(reg))
+                        self.bytecodes.append(condlab)
+                        self.bytecodes.append(bytecode.getlocal(reg))
+                        self.bytecodes.append(bytecode.getlocal(amountreg))
+                        self.bytecodes.append(bytecode.iflt(bodylab))
+                    else:
+                        raise NotImplementedError()
+                else:
+                    raise NotImplementedError(val.name)
+            else:
+                raise NotImplementedError(node.expr.expr)
+        else:
+            raise NotImplementedError(node.expr)
+        if node.else_:
+            self.exec_suite(node.else_)
+        self.bytecodes.append(endlabel)
+
     def visit_return(self, node, void):
         assert void == True
         self.push_value(node.expr)
         self.bytecodes.append(bytecode.returnvalue())
+
+    def visit_break(self, node, void):
+        assert void == True
+        self.bytecodes.append(bytecode.jump(self.loopstack[-1][1]))
+
+    def visit_continue(self, node, void):
+        assert void == True
+        self.bytecodes.append(bytecode.jump(self.loopstack[-1][0]))
 
     ##### Math #####
 
