@@ -1,11 +1,9 @@
-Make `push_value` analog for void result
 Fix call of super and constructors (seems done, but check please)
 Make overridable methods
 Implement compilation of all node types (arithmetics, etc.)
-Implement branch nodes (conditions, loops, etc.)
+Implement loops
 Fill global namespace
 Write debugging info
-Implement stack size calculation
 Make syntax error reporting even better
 Allow other functions
 Implement function closures

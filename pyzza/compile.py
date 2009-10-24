@@ -6,6 +6,8 @@ from . import parser, library, swf, bytecode, abc, tags
 
 class SyntaxError(Exception): pass
 class NameError(SyntaxError): pass
+class VerificationError(Exception): pass
+class StackError(VerificationError): pass
 
 class CodeHeader:
     """
@@ -169,11 +171,13 @@ class CodeFragment:
         parser.Modulo: 'modulo',
         parser.Number: 'number',
         parser.Return: 'return',
+        parser.If: 'if',
+        parser.Greater: 'greater',
         }
-    max_stack = 10 # TODO: fix
-    local_count = 10 # TODO: fix
-    scope_stack_init = 0
-    scope_stack_max = 10
+    max_stack = None
+    local_count = None
+    scope_stack_init = 0 # TODO: fix
+    scope_stack_max = 10 # TODO: fix
     def __init__(self, ast, library, code_header,
             private_namespace,
             class_name=None,
@@ -197,10 +201,10 @@ class CodeFragment:
         self.arguments = arguments
         for (i, v) in enumerate(arguments):
             self.namespace[v] = Register(i)
-        for node in ast:
-            self.push_value(node)
+        self.exec_suite(ast)
         self.bytecodes.append(bytecode.returnvoid())
         self.fix_registers()
+        self.verify_stack()
 
     ##### Post-processing #####
 
@@ -215,6 +219,7 @@ class CodeFragment:
         regs = {}
         for (idx, (name, val)) in zip(count(len(self.arguments)), rcount.most_common()):
             regs[name] = idx
+        self.local_count = len(self.arguments) + len(regs)
         for bcode in self.bytecodes:
             for (name, typ, _, _) in bcode.format:
                 if issubclass(typ, bytecode.Register):
@@ -225,6 +230,18 @@ class CodeFragment:
                         rval = rname.value
                     setattr(bcode, name, bytecode.Register(rval))
 
+    def verify_stack(self):
+        stack_size = 0
+        max_stack_size = 0
+        for bcode in self.bytecodes:
+            if stack_size < len(bcode.stack_before):
+                raise StackError("Not enought operands in the stack for "
+                    "{!r} (operands: {})".format(bcode, bcode.stack_before))
+            stack_size += len(bcode.stack_after) - len(bcode.stack_before)
+            if stack_size > max_stack_size:
+                max_stack_size = stack_size
+        self.max_stack = max_stack_size
+
     ##### Utility #####
 
     def push_value(self, node):
@@ -232,7 +249,18 @@ class CodeFragment:
             visitor = getattr(self, 'visit_'+self.visitors[type(node)])
         except KeyError:
             raise NotImplementedError(node)
-        visitor(node)
+        visitor(node, False)
+
+    def execute(self, node):
+        try:
+            visitor = getattr(self, 'visit_'+self.visitors[type(node)])
+        except KeyError:
+            raise NotImplementedError(node)
+        visitor(node, True)
+
+    def exec_suite(self, suite):
+        for line in suite:
+            self.execute(line)
 
     def find_name(self, name):
         for ns in chain((self,), self.parent_namespaces):
@@ -244,7 +272,8 @@ class CodeFragment:
 
     ##### Visitors #####
 
-    def visit_import(self, node):
+    def visit_import(self, node, void):
+        assert void == True
         for name in node.names:
             package = node.module.value
             name = name.value
@@ -252,7 +281,8 @@ class CodeFragment:
             assert name not in self.namespace
             self.namespace[name] = Class(cls)
 
-    def visit_class(self, node):
+    def visit_class(self, node, void):
+        assert void == True
         package = ''
         if node.decorators:
             for i in node.decorators:
@@ -272,7 +302,6 @@ class CodeFragment:
         else:
             val = self.find_name(node.bases[0].value).cls
         bases = []
-        print(bases, node.bases, val)
         while val:
             bases.append(val)
             val = val.get_base()
@@ -290,7 +319,8 @@ class CodeFragment:
             abc.QName(abc.NSPackage(package), node.name.value)))
         self.namespace[node.name.value] = NewClass(frag, cls)
 
-    def visit_function(self, node):
+    def visit_function(self, node, void):
+        assert void == True
         if self.class_name is not None:
             frag = CodeFragment(node.body, self.library, self.code_header,
                 parent_namespaces=(self,) + self.parent_namespaces,
@@ -305,7 +335,8 @@ class CodeFragment:
             self.namespace[node.name[0]] = Function(frag)
         self.code_header.add_method_body(self.method_prefix+node.name.value, frag)
 
-    def visit_assign(self, node):
+    def visit_assign(self, node, void):
+        assert void == True
         if isinstance(node.target, parser.Name):
             if node.target.value not in self.namespace:
                 reg = self.namespace[node.target.value] = Register()
@@ -325,7 +356,7 @@ class CodeFragment:
         else:
             raise NotImplementedError(node.target)
 
-    def visit_call(self, node):
+    def visit_call(self, node, void):
         name = node.expr
         if isinstance(name, parser.Name):
             name = name.value
@@ -335,10 +366,13 @@ class CodeFragment:
                 self.push_value(i)
             self.bytecodes.append(bytecode.constructprop(val.property_name,
                 len(node.arguments)))
+            if void:
+                self.bytecodes.append(bytecode.pop())
         else:
             raise NotImplementedError(name)
 
-    def visit_varname(self, node):
+    def visit_varname(self, node, void):
+        if void: return
         name = node.value
         for ns in chain((self,), self.parent_namespaces):
             if name in ns.namespace:
@@ -353,13 +387,18 @@ class CodeFragment:
                 self.bytecodes.append(bytecode.pushfalse())
         elif isinstance(val, Register):
             self.bytecodes.append(bytecode.getlocal(val))
+        elif isinstance(val, Class):
+            self.bytecodes.append(bytecode.getlex(
+                val.cls.name))
         else:
             raise NotImplementedError(val)
 
-    def visit_string(self, node):
+    def visit_string(self, node, void):
+        if void: return
         self.bytecodes.append(bytecode.pushstring(node.value))
 
-    def visit_number(self, node):
+    def visit_number(self, node, void):
+        if void: return
         if isinstance(node.value, float):
             self.bytecodes.append(bytecode.pushdouble(node.value))
         elif isinstance(node.value, int):
@@ -372,61 +411,111 @@ class CodeFragment:
         else:
             raise NotImplementedError(node)
 
-    def visit_callattr(self, node):
+    def visit_callattr(self, node, void):
         self.push_value(node.expr)
         for i in node.arguments:
             self.push_value(i)
-        self.bytecodes.append(bytecode.callproperty(
-            abc.QName(abc.NSPackage(''), node.attribute.value),
-            len(node.arguments)))
+        if void:
+            self.bytecodes.append(bytecode.callpropvoid(
+                abc.QName(abc.NSPackage(''), node.attribute.value),
+                len(node.arguments)))
+        else:
+            self.bytecodes.append(bytecode.callproperty(
+                abc.QName(abc.NSPackage(''), node.attribute.value),
+                len(node.arguments)))
 
-    def visit_getattr(self, node):
+    def visit_getattr(self, node, void):
+        if void: return
         self.push_value(node.expr)
         self.bytecodes.append(bytecode.getproperty(
             abc.QName(abc.NSPackage(''), node.name.value)))
 
-    def visit_super(self, node):
+    def visit_super(self, node, void):
         if node.method.value == '__init__':
+            assert void == True
             self.bytecodes.append(bytecode.getlocal_0())
             for i in node.arguments:
                 self.push_value(i)
             self.bytecodes.append(bytecode.constructsuper(len(node.arguments)))
         else:
-            if len(node[1][0]) > 0:
-                raise NotImplementedError("No arguments for super call "
-                    "supported")
-            self.bytecodes.append(bytecode.construct(0))
+            raise NotImplementedError()
 
-    def visit_return(self, node):
+    ##### Flow control #####
+
+    def visit_if(self, node, void):
+        assert void == True
+        endlabel = bytecode.Label()
+        for (cond, suite) in node.ifs:
+            self.push_value(cond)
+            lab = bytecode.Label()
+            self.bytecodes.append(bytecode.iffalse(lab))
+            self.exec_suite(suite)
+            self.bytecodes.append(bytecode.jump(endlabel))
+            self.bytecodes.append(lab)
+        if node.else_:
+            self.exec_suite(node.else_)
+        self.bytecodes.append(endlabel)
+
+    def visit_return(self, node, void):
+        assert void == True
         self.push_value(node.expr)
         self.bytecodes.append(bytecode.returnvalue())
 
     ##### Math #####
 
-    def visit_add(self, node):
-        self.push_value(node.left)
-        self.push_value(node.right)
-        self.bytecodes.append(bytecode.add())
+    def visit_add(self, node, void):
+        if void:
+            self.execute(node.left)
+            self.execute(node.right)
+        else:
+            self.push_value(node.left)
+            self.push_value(node.right)
+            self.bytecodes.append(bytecode.add())
 
-    def visit_subtract(self, node):
-        self.push_value(node.left)
-        self.push_value(node.right)
-        self.bytecodes.append(bytecode.subtract())
+    def visit_subtract(self, node, void):
+        if void:
+            self.execute(node.left)
+            self.execute(node.right)
+        else:
+            self.push_value(node.left)
+            self.push_value(node.right)
+            self.bytecodes.append(bytecode.subtract())
 
-    def visit_multiply(self, node):
-        self.push_value(node.left)
-        self.push_value(node.right)
-        self.bytecodes.append(bytecode.multiply())
+    def visit_multiply(self, node, void):
+        if void:
+            self.execute(node.left)
+            self.execute(node.right)
+        else:
+            self.push_value(node.left)
+            self.push_value(node.right)
+            self.bytecodes.append(bytecode.multiply())
 
-    def visit_divide(self, node):
-        self.push_value(node.left)
-        self.push_value(node.right)
-        self.bytecodes.append(bytecode.divide())
+    def visit_divide(self, node, void):
+        if void:
+            self.execute(node.left)
+            self.execute(node.right)
+        else:
+            self.push_value(node.left)
+            self.push_value(node.right)
+            self.bytecodes.append(bytecode.divide())
 
-    def visit_modulo(self, node):
-        self.push_value(node.left)
-        self.push_value(node.right)
-        self.bytecodes.append(bytecode.modulo())
+    def visit_modulo(self, node, void):
+        if void:
+            self.execute(node.left)
+            self.execute(node.right)
+        else:
+            self.push_value(node.left)
+            self.push_value(node.right)
+            self.bytecodes.append(bytecode.modulo())
+
+    def visit_greater(self, node, void):
+        if void:
+            self.execute(node.left)
+            self.execute(node.right)
+        else:
+            self.push_value(node.left)
+            self.push_value(node.right)
+            self.bytecodes.append(bytecode.greaterthan())
 
 def get_options():
     import optparse
@@ -434,6 +523,10 @@ def get_options():
     op.add_option('-l', '--library', metavar="SWFFILE",
         help="Use SWFFILE as library of external classes (repeatable).",
         dest="libraries", default=[], action="append", type="string")
+    op.add_option('-n', '--no-std-globals',
+        help="Do not add standart globals to a namespace (e.g. if you "
+            "don't use library.swf from playerglobal.swc as a library)",
+        dest="std_globals", default=True, action="store_false")
     op.add_option('-o', '--output', metavar="SWFFILE",
         help="Output swf data into SWFFILE.",
         dest="output", default=None, type="string")
@@ -450,6 +543,8 @@ def main():
     lib = library.Library()
     for i in options.libraries:
         lib.add_file(i)
+    if options.std_globals:
+        globals['Math'] = Class(lib.get_class('', 'Math'))
     code_header = CodeHeader(args[0])
     frag = CodeFragment(ast, lib, code_header,
         private_namespace=args[0]+'$23')

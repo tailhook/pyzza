@@ -68,7 +68,7 @@ class String(Leaf):
             assert value.endswith('"""')
             value = value[3:-3]
         elif value.startswith('"'):
-            assert value.endNameswith('"')
+            assert value.endswith('"')
             value = value[1:-1]
         elif value.startswith("'"):
             assert value.endswith("'")
@@ -124,6 +124,24 @@ class ImportStmt(Node):
         _from, self.module, _import, self.names = children
         assert _from.value == 'from', _from
         assert _import.value == 'import', _import
+        super().__init__(context)
+    @property
+    def children(self):
+        yield self.module
+        yield self.names
+
+class If(Node):
+    __slots__ = ('ifs', 'else_')
+    def __init__(self, children, context):
+        self.ifs = []
+        self.else_ = None
+        chit = iter(children)
+        for k in chit:
+            if k.value in ('if', 'elif'):
+                self.ifs.append((next(chit), next(chit)))
+            else:
+                assert k.value == 'else', k
+                self.else_ = next(chit)
         super().__init__(context)
     @property
     def children(self):
@@ -271,6 +289,8 @@ class Divide(Binary):
     __slots__ = ()
 class Modulo(Binary):
     __slots__ = ()
+class Greater(Binary):
+    __slots__ = ()
 
 operators = {
     '+': Add,
@@ -278,6 +298,7 @@ operators = {
     '*': Multiply,
     '/': Divide,
     '%': Modulo,
+    '>': Greater,
     }
 def Term(child, ctx):
     """Any binary operators are here. Precedence is handled by parser"""
@@ -393,6 +414,7 @@ tokens = {
     token.NUMBER: Number,
     token.SLASH: Op,
     token.COMMA: Nop,
+    token.GREATER: Op,
     }
 
 symbols = {
@@ -429,6 +451,7 @@ symbols = {
     symbol.tname: TName,
     symbol.tfpdef: Skip,
     symbol.trailer: Term,
+    symbol.comp_op: Term,
     symbol.trailattr: GetAttr,
     symbol.trailsubscr: Subscr,
     symbol.trailcall: Call,
@@ -438,6 +461,7 @@ symbols = {
     symbol.funcdef: Func,
     symbol.classdef: Class,
     symbol.flow_stmt: Skip,
+    symbol.if_stmt: If,
     symbol.decorated: Decorated,
     symbol.return_stmt: Return,
     symbol.testlist_gexp: GenExp,

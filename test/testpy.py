@@ -2,15 +2,12 @@ from flash.display import Sprite
 from flash.text import TextField
 from flash.text import TextFormat
 
-class Base:
-    def __init__(self, value):
-        self.value = self.prefix() + value
-
-class Hello(Base):
-    def __init__(self, value):
-        super().__init__(value)
-    def prefix(self):
-        return 'Hello '
+class Hello:
+    def __init__(self):
+        if Math.random() > 0.5:
+            self.text = "Hello"
+        else:
+            self.text = "Shit"
 
 @package('')
 class Main(Sprite):
@@ -23,6 +20,5 @@ class Main(Sprite):
         label = TextField()
         label.background = True
         label.border = True
-        label.defaultTextFormat = TextFormat('Courier New', 10)
-        label.text = Hello(value).value
+        label.text = Hello().text
         self.addChild(label)

@@ -4,7 +4,9 @@ import sys
 from .io import ABCStream
 from . import io
 from .abc import (MultinameInfo, MethodInfo, ExceptionInfo,
-    ClassInfo, NamespaceInfo, Offset, Slot, Register)
+    ClassInfo, NamespaceInfo, Offset, Slot, Register,
+    Multiname, MultinameL, QName, RTQName, RTQNameL
+    )
 
 def gather_bytecodes(name, bases, dic):
     res = {}
@@ -76,15 +78,15 @@ class Bytecode(object, metaclass=BytecodeMeta):
 class PropertyBytecode(Bytecode):
     propertyattr = 'property'
     def _stack_before(self):
-        val = getattr(self, propertyattr)
+        val = getattr(self, self.propertyattr)
         if isinstance(val, (Multiname, QName)):
-            return ('obj', 'namespace', 'name')
+            return ('obj',)
         elif isinstance(val, RTQName):
             return ('obj', 'namespace')
         elif isinstance(val, MultinameL):
             return ('obj', 'name')
         elif isinstance(val, RTQNameL):
-            return ('obj',)
+            return ('obj', 'namespace', 'name')
         else:
             raise NotImplementedError(val)
     stack_before = property(_stack_before)
@@ -105,8 +107,11 @@ class JumpBytecode(Bytecode):
         ('offset', Offset, None, io.s24),
         )
 
-class Label(object):
+class Label(object): # pseudo-bytecode
     __slots__ = ()
+    format = ()
+    stack_before = ()
+    stack_after = ()
     def write(self, stream, index):
         pass
 
@@ -152,7 +157,7 @@ class bytecodes(metaclass=gather_bytecodes):
         @property
         def stack_before(self):
             return ('function', 'receiver') + tuple('arg{}'.format(i)
-                for i in self.arg_count)
+                for i in range(self.arg_count))
         stack_after = ('value',)
 
     class callmethod(Bytecode):
@@ -164,12 +169,12 @@ class bytecodes(metaclass=gather_bytecodes):
         @property
         def stack_before(self):
             return ('receiver',) + tuple('arg{}'.format(i)
-                for i in self.arg_count)
+                for i in range(self.arg_count))
         stack_after = ('value',)
 
     class callproperty(PropertyBytecode):
         format = (
-            ('property', MultinameInfo, 'multiname', io.u30),
+            ('method', MultinameInfo, 'multiname', io.u30),
             ('arg_count', int, None, io.u30),
             )
         code = 0x46
@@ -177,7 +182,7 @@ class bytecodes(metaclass=gather_bytecodes):
         @property
         def stack_before(self):
             return super()._stack_before() + tuple('arg{}'.format(i)
-                for i in self.arg_count)
+                for i in range(self.arg_count))
         stack_after = ('value',)
 
     class callproplex(PropertyBytecode):
@@ -190,12 +195,12 @@ class bytecodes(metaclass=gather_bytecodes):
         @property
         def stack_before(self):
             return super()._stack_before() + tuple('arg{}'.format(i)
-                for i in self.arg_count)
+                for i in range(self.arg_count))
         stack_after = ('value',)
 
     class callpropvoid(PropertyBytecode):
         format = (
-            ('property', MultinameInfo, 'multiname', io.u30),
+            ('method', MultinameInfo, 'multiname', io.u30),
             ('arg_count', int, None, io.u30),
             )
         code = 0x4f
@@ -203,7 +208,7 @@ class bytecodes(metaclass=gather_bytecodes):
         @property
         def stack_before(self):
             return super()._stack_before() + tuple('arg{}'.format(i)
-                for i in self.arg_count)
+                for i in range(self.arg_count))
 
     class callstatic(Bytecode):
         format = (
@@ -214,7 +219,7 @@ class bytecodes(metaclass=gather_bytecodes):
         @property
         def stack_before(self):
             return ('receiver',) + tuple('arg{}'.format(i)
-                for i in self.arg_count)
+                for i in range(self.arg_count))
         stack_after = ('value',)
 
     class callsuper(PropertyBytecode):
@@ -227,7 +232,7 @@ class bytecodes(metaclass=gather_bytecodes):
         @property
         def stack_before(self):
             return super()._stack_before() + tuple('arg{}'.format(i)
-                for i in self.arg_count)
+                for i in range(self.arg_count))
         stack_after = ('value',)
 
     class callsupervoid(PropertyBytecode):
@@ -240,7 +245,7 @@ class bytecodes(metaclass=gather_bytecodes):
         @property
         def stack_before(self):
             return super()._stack_before() + tuple('arg{}'.format(i)
-                for i in self.arg_count)
+                for i in range(self.arg_count))
 
     class checkfilter(UnaryBytecode):
         code = 0x78
@@ -265,7 +270,7 @@ class bytecodes(metaclass=gather_bytecodes):
         @property
         def stack_before(self):
             return ('object',) + tuple('arg{}'.format(i)
-                for i in self.arg_count)
+                for i in range(self.arg_count))
         stack_after = ('value',)
 
     class constructprop(PropertyBytecode):
@@ -277,7 +282,7 @@ class bytecodes(metaclass=gather_bytecodes):
         @property
         def stack_before(self):
             return super()._stack_before() + tuple('arg{}'.format(i)
-                for i in self.arg_count)
+                for i in range(self.arg_count))
         stack_after = ('value',)
 
     class constructsuper(Bytecode):
@@ -288,7 +293,7 @@ class bytecodes(metaclass=gather_bytecodes):
         @property
         def stack_before(self):
             return ('object',) + tuple('arg{}'.format(i)
-                for i in self.arg_count)
+                for i in range(self.arg_count))
         stack_after = ('value',)
 
     class convert_b(UnaryBytecode):
@@ -398,7 +403,8 @@ class bytecodes(metaclass=gather_bytecodes):
         format = (
             ('property', MultinameInfo, 'multiname', io.u30),
             )
-        def _stack_before(self):
+        @property
+        def stack_before(self):
             return super()._stack_before()[1:]
         stack_after = ('obj',)
 
@@ -658,7 +664,7 @@ class bytecodes(metaclass=gather_bytecodes):
             )
         @property
         def stack_before(self):
-            return tuple('value{}'.format(i) for i in xrange(self.arg_count))
+            return tuple('value{}'.format(i) for i in range(self.arg_count))
 
     class newcatch(Bytecode):
         code = 0x5a
@@ -691,7 +697,7 @@ class bytecodes(metaclass=gather_bytecodes):
         def stack_before(self):
             return sum(
                 (('name{}'.format(i), 'value{}'.format(i))
-                for i in xrange(self.arg_count)),
+                for i in range(self.arg_count)),
                 tuple())
         stack_after = ('newobj',)
 
@@ -916,7 +922,7 @@ class Assembler(object):
         for code in self._codes:
             index = self._stream.tell()
             if isinstance(code, Label):
-                memo[code] = index
+                memo[code] = Offset(index)
                 fw = fwjumps.pop(code, None)
                 if fw:
                     for i in fw:
@@ -927,7 +933,7 @@ class Assembler(object):
                 code = code.__class__(code.offset)
                 if code.offset not in memo:
                     fwjumps[code.offset].append(index)
-                    code.offset = 0
+                    code.offset = Offset(0)
                 else:
                     code.offset = memo[code.offset]
             code.write(self._stream, self._index)
