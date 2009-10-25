@@ -186,6 +186,10 @@ class CodeFragment:
         parser.Break: 'break',
         parser.Continue: 'continue',
         parser.Greater: 'greater',
+        parser.Equal: 'equal',
+        parser.NotEqual: 'notequal',
+        parser.NotTest: 'not',
+        parser.Negate: 'negate',
         }
     max_stack = None
     local_count = None
@@ -562,7 +566,42 @@ class CodeFragment:
         assert void == True
         self.bytecodes.append(bytecode.jump(self.loopstack[-1][0]))
 
+    ##### Boolean operations #####
+
+    def visit_not(self, node, void):
+        if void:
+            self.execute(node.expr)
+        else:
+            self.push_value(node.expr)
+            self.bytecodes.append(bytecode.not_())
+
+    def visit_equal(self, node, void):
+        if void:
+            self.execute(node.left)
+            self.execute(node.right)
+        else:
+            self.push_value(node.left)
+            self.push_value(node.right)
+            self.bytecodes.append(bytecode.strictequals())
+
+    def visit_notequal(self, node, void):
+        if void:
+            self.execute(node.left)
+            self.execute(node.right)
+        else:
+            self.push_value(node.left)
+            self.push_value(node.right)
+            self.bytecodes.append(bytecode.strictequals())
+            self.bytecodes.append(bytecode.not_())
+
     ##### Math #####
+
+    def visit_negate(self, node, void):
+        if void:
+            self.execute(node.expr)
+        else:
+            self.push_value(node.expr)
+            self.bytecodes.append(bytecode.negate())
 
     def visit_add(self, node, void):
         if void:

@@ -287,15 +287,31 @@ def _Assign(child, ctx):
         return child[0]
     return Assign(child, ctx)
 
+class Negate(Node):
+    __slots__ = ('expr',)
+    def __init__(self, children, context):
+        _neg, self.expr = children
+        assert _neg.value == '-', _neg
+        super().__init__(context)
+
 def Factor(child, ctx):
     if len(child) < 2:
         return child[0]
+    if child[0].value == '-':
+        return Negate(child, ctx)
     raise NotImplementedError(child)
 
-def NotTest(child, ctx):
+class NotTest(Node):
+    __slots__ = ('expr',)
+    def __init__(self, children, context):
+        _not, self.expr = children
+        assert _not.value == 'not', _not
+        super().__init__(context)
+
+def _NotTest(child, ctx):
     if len(child) < 2:
         return child[0]
-    raise NotImplementedError(child)
+    return NotTest(child, ctx)
 
 def Test(child, ctx):
     if len(child) < 2:
@@ -329,6 +345,10 @@ class Modulo(Binary):
     __slots__ = ()
 class Greater(Binary):
     __slots__ = ()
+class Equal(Binary):
+    __slots__ = ()
+class NotEqual(Binary):
+    __slots__ = ()
 
 operators = {
     '+': Add,
@@ -337,6 +357,8 @@ operators = {
     '/': Divide,
     '%': Modulo,
     '>': Greater,
+    '!=': NotEqual,
+    '==': Equal,
     }
 def Term(child, ctx):
     """Any binary operators are here. Precedence is handled by parser"""
@@ -445,7 +467,6 @@ tokens = {
     token.STRING: String,
     token.DEDENT: Nop,
     token.ENDMARKER: Nop,
-    token.EQUAL: Op,
     token.PLUS: Op,
     token.MINUS: Op,
     token.STAR: Op,
@@ -453,7 +474,10 @@ tokens = {
     token.SLASH: Op,
     token.COMMA: Nop,
     token.GREATER: Op,
+    token.EQUAL: Op,
     token.PLUSEQUAL: Op,
+    token.EQEQUAL: Op,
+    token.NOTEQUAL: Op,
     }
 
 symbols = {
@@ -475,7 +499,7 @@ symbols = {
     symbol.xor_expr: Term,
     symbol.expr: Term,
     symbol.comparison: Term,
-    symbol.not_test: NotTest,
+    symbol.not_test: _NotTest,
     symbol.and_test: Term,
     symbol.or_test: Term,
     symbol.test: Test,

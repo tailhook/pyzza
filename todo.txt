@@ -1,7 +1,9 @@
 Fix call of super and constructors (seems done, but check please)
 Make overridable methods
+Implement try...except
 Implement compilation of all node types (arithmetics, etc.)
 Implement while loop
+Implement loop primitives (range, keys, values, items)
 For creates new variables. Fix, so that it can reuse variable
 Fill global namespace
 Write debugging info
