@@ -419,8 +419,7 @@ class CodeFragment:
         else:
             raise NotImplementedError(node.operator)
         if isinstance(node.target, parser.Name):
-            if node.operator.value != '=':
-                self.bytecodes.append(bytecode.coerce_a())
+            self.bytecodes.append(bytecode.coerce_a())
             self.bytecodes.append(bytecode.setlocal(reg))
         elif isinstance(node.target, parser.GetAttr):
             self.bytecodes.append(bytecode.setproperty(
