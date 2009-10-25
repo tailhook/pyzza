@@ -5,6 +5,7 @@ from flash.display import StageAlign
 from flash.events import Event
 
 class Test:
+    """Base class for all tests"""
     def __init__(self, reporter, name):
         self.name = name
         self.reporter = reporter
@@ -21,9 +22,18 @@ class Test:
         self.reporter.add_assert()
         if a != b:
             self.result = False
+    def assertFloatEquals(self, a, b):
+        self.reporter.add_assert()
+        if -0.001 < a - b < 0.001:
+            self.result = False
     def assertNotEquals(self, a, b):
         self.reporter.add_assert()
         if a == b:
+            self.result = False
+    def assertFloatNotEquals(self, a, b):
+        self.reporter.add_assert()
+        dif = a-b
+        if dif > 0.001 or dif < -0.001:
             self.result = False
     def run(self):
         self.reporter.start(self.name)
@@ -36,9 +46,11 @@ class Test:
 class TestMath(Test):
     def __init__(self, reporter, name):
         super().__init__(reporter, name)
+
     def test(self):
         self.operators()
         self.precedence()
+        self.augmented_assign()
 
     def operators(self):
         self.assertEquals(2*3, 6)
@@ -55,6 +67,52 @@ class TestMath(Test):
         self.assertEquals(4-6*3, -14)
         self.assertEquals(6*3-4, 14)
         self.assertEquals(6*(3-4), -6)
+
+    def augmented_assign(self):
+        i = 0
+        self.assertEquals(i, 0)
+        i += 2
+        self.assertEquals(i, 2)
+        i += i
+        self.assertEquals(i, 4)
+        i *= 3
+        self.assertEquals(i, 12)
+        i -= 2
+        self.assertEquals(i, 10)
+        i /= 2
+        self.assertEquals(i, 5)
+        j = 3
+        i *= j
+        self.assertEquals(i, 15)
+        i %= 7
+        self.assertEquals(i, 1)
+
+class Loops(Test):
+    def __init__(self, reporter, name):
+        super().__init__(reporter, name)
+
+    def test(self):
+        self.testRange1()
+        self.testRange2()
+        self.testRange3()
+
+    def testRange1(self):
+        j = 1.1
+        for i in range(10):
+            j += 1.1
+        self.assertFloatEquals(j, 12.1)
+
+    def testRange2(self):
+        self.val = 0
+        for i in range(10):
+            self.val += 1
+        self.assertEquals(self.val, 10)
+
+    def testRange3(self):
+        j = 7
+        for i in range(11):
+            j += 3
+        self.assertEquals(j, 40)
 
 class Reporter:
     def __init__(self, textlabel):
@@ -118,6 +176,7 @@ class Main(Sprite):
         self.addEventListener(Event.ENTER_FRAME, self.start_tests)
 
     def start_tests(self, event):
-        TestMath(self.reporter, 'Math').run()
-        self.reporter.finish()
         self.removeEventListener(Event.ENTER_FRAME, self.start_tests)
+        TestMath(self.reporter, 'Math').run()
+        Loops(self.reporter, 'Loops').run()
+        self.reporter.finish()

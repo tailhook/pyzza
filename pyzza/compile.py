@@ -9,6 +9,17 @@ class NameError(SyntaxError): pass
 class VerificationError(Exception): pass
 class StackError(VerificationError): pass
 
+def binary(fun):
+    def wrapper(self, node, void):
+        if void:
+            self.execute(node.left)
+            self.execute(node.right)
+        else:
+            self.push_value(node.left)
+            self.push_value(node.right)
+            fun(self, node)
+    return wrapper
+
 class CodeHeader:
     """
     This class holds structures like those in abc.ABCFile but in more usefull
@@ -186,9 +197,14 @@ class CodeFragment:
         parser.Break: 'break',
         parser.Continue: 'continue',
         parser.Greater: 'greater',
+        parser.GreaterEq: 'greatereq',
+        parser.Less: 'less',
+        parser.LessEq: 'lesseq',
         parser.Equal: 'equal',
         parser.NotEqual: 'notequal',
         parser.NotTest: 'not',
+        parser.Or: 'or',
+        parser.And: 'and',
         parser.Negate: 'negate',
         }
     max_stack = None
@@ -375,7 +391,7 @@ class CodeFragment:
             if node.target.value not in self.namespace:
                 reg = self.namespace[node.target.value] = Register()
             else:
-                reg = self.namespace[node[0]]
+                reg = self.namespace[node.target.value]
             if node.operator.value != '=':
                 self.bytecodes.append(bytecode.getlocal(reg))
         elif isinstance(node.target, parser.GetAttr):
@@ -388,21 +404,25 @@ class CodeFragment:
         else:
             raise NotImplementedError(node.target)
         self.push_value(node.expr)
+        if node.operator.value == '=':
+            pass
+        elif node.operator.value == '+=':
+            self.bytecodes.append(bytecode.add())
+        elif node.operator.value == '-=':
+            self.bytecodes.append(bytecode.subtract())
+        elif node.operator.value == '*=':
+            self.bytecodes.append(bytecode.multiply())
+        elif node.operator.value == '/=':
+            self.bytecodes.append(bytecode.divide())
+        elif node.operator.value == '%=':
+            self.bytecodes.append(bytecode.modulo())
+        else:
+            raise NotImplementedError(node.operator)
         if isinstance(node.target, parser.Name):
-            if node.operator.value == '=':
-                pass
-            elif node.operator.value == '+=':
-                self.bytecodes.append(bytecode.add())
-            else:
-                raise NotImplementedError(node.operator)
+            if node.operator.value != '=':
+                self.bytecodes.append(bytecode.coerce_a())
             self.bytecodes.append(bytecode.setlocal(reg))
         elif isinstance(node.target, parser.GetAttr):
-            if node.operator.value == '=':
-                pass
-            elif node.operator.value == '+=':
-                self.bytecodes.append(bytecode.add())
-            else:
-                raise NotImplementedError(node.operator)
             self.bytecodes.append(bytecode.setproperty(
                 abc.QName(abc.NSPackage(self.package_namespace),
                 node.target.name.value)))
@@ -575,24 +595,23 @@ class CodeFragment:
             self.push_value(node.expr)
             self.bytecodes.append(bytecode.not_())
 
-    def visit_equal(self, node, void):
-        if void:
-            self.execute(node.left)
-            self.execute(node.right)
-        else:
-            self.push_value(node.left)
-            self.push_value(node.right)
-            self.bytecodes.append(bytecode.strictequals())
+    def visit_or(self, node, void):
+        endlabel = bytecode.Label()
+        self.push_value(node.left)
+        self.bytecodes.append(bytecode.dup())
+        self.bytecodes.append(bytecode.iftrue(endlabel))
+        self.bytecodes.append(bytecode.pop())
+        self.push_value(node.right)
+        self.bytecodes.append(endlabel)
 
-    def visit_notequal(self, node, void):
-        if void:
-            self.execute(node.left)
-            self.execute(node.right)
-        else:
-            self.push_value(node.left)
-            self.push_value(node.right)
-            self.bytecodes.append(bytecode.strictequals())
-            self.bytecodes.append(bytecode.not_())
+    def visit_and(self, node, void):
+        endlabel = bytecode.Label()
+        self.push_value(node.left)
+        self.bytecodes.append(bytecode.dup())
+        self.bytecodes.append(bytecode.iffalse(endlabel))
+        self.bytecodes.append(bytecode.pop())
+        self.push_value(node.right)
+        self.bytecodes.append(endlabel)
 
     ##### Math #####
 
@@ -603,59 +622,52 @@ class CodeFragment:
             self.push_value(node.expr)
             self.bytecodes.append(bytecode.negate())
 
-    def visit_add(self, node, void):
-        if void:
-            self.execute(node.left)
-            self.execute(node.right)
-        else:
-            self.push_value(node.left)
-            self.push_value(node.right)
-            self.bytecodes.append(bytecode.add())
+    @binary
+    def visit_add(self, node):
+        self.bytecodes.append(bytecode.add())
 
-    def visit_subtract(self, node, void):
-        if void:
-            self.execute(node.left)
-            self.execute(node.right)
-        else:
-            self.push_value(node.left)
-            self.push_value(node.right)
-            self.bytecodes.append(bytecode.subtract())
+    @binary
+    def visit_subtract(self, node):
+        self.bytecodes.append(bytecode.subtract())
 
-    def visit_multiply(self, node, void):
-        if void:
-            self.execute(node.left)
-            self.execute(node.right)
-        else:
-            self.push_value(node.left)
-            self.push_value(node.right)
-            self.bytecodes.append(bytecode.multiply())
+    @binary
+    def visit_multiply(self, node):
+        self.bytecodes.append(bytecode.multiply())
 
-    def visit_divide(self, node, void):
-        if void:
-            self.execute(node.left)
-            self.execute(node.right)
-        else:
-            self.push_value(node.left)
-            self.push_value(node.right)
-            self.bytecodes.append(bytecode.divide())
+    @binary
+    def visit_divide(self, node):
+        self.bytecodes.append(bytecode.divide())
 
-    def visit_modulo(self, node, void):
-        if void:
-            self.execute(node.left)
-            self.execute(node.right)
-        else:
-            self.push_value(node.left)
-            self.push_value(node.right)
-            self.bytecodes.append(bytecode.modulo())
+    @binary
+    def visit_modulo(self, node):
+        self.bytecodes.append(bytecode.modulo())
 
-    def visit_greater(self, node, void):
-        if void:
-            self.execute(node.left)
-            self.execute(node.right)
-        else:
-            self.push_value(node.left)
-            self.push_value(node.right)
-            self.bytecodes.append(bytecode.greaterthan())
+    ##### Comparison #####
+
+    @binary
+    def visit_equal(self, node):
+        self.bytecodes.append(bytecode.strictequals())
+
+    @binary
+    def visit_notequal(self, node):
+        self.bytecodes.append(bytecode.strictequals())
+        self.bytecodes.append(bytecode.not_())
+
+    @binary
+    def visit_greater(self, node):
+        self.bytecodes.append(bytecode.greaterthan())
+
+    @binary
+    def visit_greatereq(self, node):
+        self.bytecodes.append(bytecode.greaterequals())
+
+    @binary
+    def visit_less(self, node):
+        self.bytecodes.append(bytecode.lessthan())
+
+    @binary
+    def visit_lesseq(self, node):
+        self.bytecodes.append(bytecode.lessequals())
 
 def get_options():
     import optparse

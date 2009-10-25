@@ -345,6 +345,16 @@ class Modulo(Binary):
     __slots__ = ()
 class Greater(Binary):
     __slots__ = ()
+class GreaterEq(Binary):
+    __slots__ = ()
+class Less(Binary):
+    __slots__ = ()
+class LessEq(Binary):
+    __slots__ = ()
+class And(Binary):
+    __slots__ = ()
+class Or(Binary):
+    __slots__ = ()
 class Equal(Binary):
     __slots__ = ()
 class NotEqual(Binary):
@@ -357,8 +367,13 @@ operators = {
     '/': Divide,
     '%': Modulo,
     '>': Greater,
+    '>=': GreaterEq,
+    '<': Less,
+    '<=': LessEq,
     '!=': NotEqual,
     '==': Equal,
+    'or': Or,
+    'and': And,
     }
 def Term(child, ctx):
     """Any binary operators are here. Precedence is handled by parser"""
@@ -474,10 +489,17 @@ tokens = {
     token.SLASH: Op,
     token.COMMA: Nop,
     token.GREATER: Op,
+    token.GREATEREQUAL: Op,
+    token.LESS: Op,
+    token.LESSEQUAL: Op,
     token.EQUAL: Op,
     token.PLUSEQUAL: Op,
     token.EQEQUAL: Op,
     token.NOTEQUAL: Op,
+    token.STAREQUAL: Op,
+    token.MINEQUAL: Op,
+    token.SLASHEQUAL: Op,
+    token.PERCENTEQUAL: Op,
     }
 
 symbols = {
