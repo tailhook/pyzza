@@ -120,6 +120,16 @@ class Return(Node):
     def children(self):
         yield self.expr
 
+class Raise(Node):
+    __slots__ = ('expr',)
+    def __init__(self, children, context):
+        _raise, self.expr = children
+        assert _raise.value == 'raise', _raise
+        super().__init__(context)
+    @property
+    def children(self):
+        yield self.expr
+
 class Break(Node):
     __slots__ = ()
     def __init__(self, children, context):
@@ -177,6 +187,59 @@ class For(Node):
         if len(children) > 5:
             _else, self.else_ = children[5:]
             assert _else.value == 'else', _else
+        super().__init__(context)
+    @property
+    def children(self):
+        yield self.var
+        yield self.expr
+        yield self.body
+        if self.else_:
+            yield self.else_
+
+class Try(Node):
+    __slots__ = ('body', 'excepts', 'except_', 'else_', 'finally_')
+    def __init__(self, children, context):
+        ch = iter(children)
+        _try = next(ch)
+        assert _try.value == 'try', _try
+        self.excepts = []
+        self.except_ = None
+        self.finally_ = None
+        self.else_ = None
+        self.body = next(ch)
+        for tok in ch:
+            if isinstance(tok, Tuple): #except_clause
+                assert self.except_ is None
+                assert self.else_ is None
+                assert self.finally_ is None
+                tok = tok.children
+                if len(tok) < 2:
+                    _except, = tok
+                    assert _except.value == 'except', _except
+                    self.except_ = next(ch)
+                elif len(tok) < 3:
+                    _except, typ = tok
+                    suite = next(ch)
+                    assert _except.value == 'except', _except
+                    self.excepts.append((typ, None, suite))
+                elif len(tok) < 5:
+                    _except, typ, _as, name = tok
+                    suite = next(ch)
+                    assert _except.value == 'except', _except
+                    assert _as.value == 'as', _as
+                    self.excepts.append((typ, name, suite))
+                else:
+                    raise NotImplementedError(tok)
+            elif tok.value == 'else':
+                assert self.finally_ is None
+                assert self.else_ is None
+                assert self.excepts or self.except_
+                self.else_ = next(ch)
+            elif tok.value == 'finally':
+                assert self.finally_ is None
+                self.finally_ = next(ch)
+            else:
+                raise NotImplementedError(tok)
         super().__init__(context)
     @property
     def children(self):
@@ -550,9 +613,12 @@ symbols = {
     symbol.flow_stmt: Skip,
     symbol.if_stmt: If,
     symbol.for_stmt: For,
+    symbol.try_stmt: Try,
     symbol.break_stmt: Break,
+    symbol.except_clause: Tuple,
     symbol.decorated: Decorated,
     symbol.return_stmt: Return,
+    symbol.raise_stmt: Raise,
     symbol.testlist_gexp: GenExp,
     symbol.file_input: FileInput,
     }

@@ -49,7 +49,7 @@ class CodeHeader:
         mb.local_count = frag.local_count
         mb.init_scope_depth = frag.scope_stack_init
         mb.max_scope_depth = frag.scope_stack_max
-        mb.exception_info = []
+        mb.exception_info = frag.exceptions
         mb.traits_info = []
         mb.bytecode = frag.bytecodes
         self.tag.real_body.method_body_info.append(mb)
@@ -192,8 +192,10 @@ class CodeFragment:
         parser.Modulo: 'modulo',
         parser.Number: 'number',
         parser.Return: 'return',
+        parser.Raise: 'raise',
         parser.If: 'if',
         parser.For: 'for',
+        parser.Try: 'try',
         parser.Break: 'break',
         parser.Continue: 'continue',
         parser.Greater: 'greater',
@@ -227,6 +229,7 @@ class CodeFragment:
             ]
         self.namespace = {}
         self.loopstack = [] # pairs of continue label and break label
+        self.exceptions = []
         self.private_namespace = private_namespace
         self.package_namespace = package_namespace
         self.method_prefix = method_prefix or private_namespace + ':'
@@ -572,10 +575,62 @@ class CodeFragment:
             self.exec_suite(node.else_)
         self.bytecodes.append(endlabel)
 
+    def visit_try(self, node, void):
+        assert void
+        startlabel = bytecode.Label()
+        endbodylabel = bytecode.Label()
+        endlabel = bytecode.Label()
+
+        self.bytecodes.append(startlabel)
+        self.exec_suite(node.body)
+        self.bytecodes.append(endbodylabel)
+        self.bytecodes.append(bytecode.jump(endlabel))
+        for exc in node.excepts + [node.except_]:
+            if not exc: continue
+            catchlabel = bytecode.Label()
+            excinfo = abc.ExceptionInfo()
+            excinfo.exc_from = startlabel
+            excinfo.exc_to = endbodylabel
+            excinfo.target = catchlabel
+            reg = None
+            if isinstance(exc, tuple):
+                excinfo.exc_type = self.find_name(exc[0].value).cls.name
+                if exc[1] is not None:
+                    excinfo.var_name = abc.QName(abc.NSPackage(''),exc[1].value)
+                    reg = self.namespace[exc[1].value] = Register()
+                else:
+                    excinfo.var_name = None
+                excbody = exc[2]
+            else:
+                excinfo.exc_type = abc.AnyType()
+                excinfo.var_name = None
+                excbody = exc
+            self.exceptions.append(excinfo)
+            self.bytecodes.append(catchlabel)
+            self.bytecodes.append(bytecode.getlocal_0())
+            self.bytecodes.append(bytecode.pushscope())
+            self.bytecodes.append(bytecode.newcatch(excinfo))
+            self.bytecodes.append(bytecode.pop())
+            if reg is None:
+                self.bytecodes.append(bytecode.pop())
+            else:
+                self.bytecodes.append(bytecode.setlocal(reg))
+            self.exec_suite(excbody)
+            if reg is not None:
+                self.bytecodes.append(bytecode.kill(reg))
+                del self.namespace[exc[1].value]
+            self.bytecodes.append(bytecode.jump(endlabel))
+        self.bytecodes.append(endlabel)
+
     def visit_return(self, node, void):
         assert void == True
         self.push_value(node.expr)
         self.bytecodes.append(bytecode.returnvalue())
+
+    def visit_raise(self, node, void):
+        assert void == True
+        self.push_value(node.expr)
+        self.bytecodes.append(bytecode.throw())
 
     def visit_break(self, node, void):
         assert void == True
@@ -696,6 +751,8 @@ def main():
         lib.add_file(i)
     if options.std_globals:
         globals['Math'] = Class(lib.get_class('', 'Math'))
+        globals['String'] = Class(lib.get_class('', 'String'))
+        globals['Number'] = Class(lib.get_class('', 'Number'))
     code_header = CodeHeader(args[0])
     frag = CodeFragment(ast, lib, code_header,
         private_namespace=args[0]+'$23')

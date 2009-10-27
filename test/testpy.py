@@ -114,6 +114,39 @@ class Loops(Test):
             j += 3
         self.assertEquals(j, 40)
 
+    def testRange4(self):
+        j = 0
+        for i in range(11):
+            if i > 3:
+                break
+        else:
+            j = 1
+        self.assertEquals(j, 0)
+
+    def testRange5(self):
+        j = 0
+        for i in range(11):
+            if i > 30:
+                break
+        else:
+            j = 1
+        self.assertEquals(j, 1)
+
+class Exceptions(Test):
+    def __init__(self, reporter, name):
+        super().__init__(reporter, name)
+
+    def test(self):
+        self.testSimple()
+
+    def testSimple(self):
+        s = "None"
+        try:
+            raise "Hello"
+        except String as e:
+            s = e
+        self.assertEquals(s, "Hello")
+
 class Reporter:
     def __init__(self, textlabel):
         self.textlabel = textlabel
@@ -179,4 +212,5 @@ class Main(Sprite):
         self.removeEventListener(Event.ENTER_FRAME, self.start_tests)
         TestMath(self.reporter, 'Math').run()
         Loops(self.reporter, 'Loops').run()
+        Exceptions(self.reporter, 'Exceptions').run()
         self.reporter.finish()

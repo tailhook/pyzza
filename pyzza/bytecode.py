@@ -674,7 +674,7 @@ class bytecodes(metaclass=gather_bytecodes):
         format = (
             ('exception', ExceptionInfo, 'exception_info', io.u30),
             )
-        stack_after = ('catchscope',)
+        stack_after = ('catchvalue', 'catchscope',)
 
     class newclass(Bytecode):
         code = 0x58

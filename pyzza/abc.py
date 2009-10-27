@@ -889,6 +889,7 @@ class IndexCreator(object):
             self.metadata.most_common()))
 
     def get_string_index(self, value):
+        assert isinstance(value, str), "Value {!r} is not string".format(value)
         self.strings[value] += 1
         return 0
 

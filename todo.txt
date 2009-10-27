@@ -1,6 +1,6 @@
 Fix call of super and constructors (seems done, but check please)
 Make overridable methods
-Implement try...except
+Implement try...finally
 Implement compilation of all node types (arithmetics, etc.)
 Implement while loop
 Implement loop primitives (range, keys, values, items)
@@ -12,3 +12,10 @@ Allow other functions
 Implement function closures
 Allow other files
 Try merging several DoABC tags for optimization
+Use try...except in unittests
+Mandatory optimizations:
+    * remove zero jumps
+    * "getlocal 1" -> "getlocal_1"
+Optional optimisations:
+    * optimize constant arithmetics (easy)
+    * reuse variables (hard)
