@@ -138,6 +138,7 @@ class Exceptions(Test):
 
     def test(self):
         self.testSimple()
+        self.testNoMethod()
 
     def testSimple(self):
         s = "None"
@@ -146,6 +147,15 @@ class Exceptions(Test):
         except String as e:
             s = e
         self.assertEquals(s, "Hello")
+
+    def testNoMethod(self):
+        s = "None"
+        try:
+            self.hello()
+        except TypeError as e:
+            s = e.getStackTrace()
+        self.assertTrue(s.indexOf('hello is not a function') >= 0)
+        self.assertTrue(s.indexOf('testNoMethod()') >= 0)
 
 class Reporter:
     def __init__(self, textlabel):

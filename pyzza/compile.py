@@ -220,12 +220,14 @@ class CodeFragment:
             parent_namespaces=(Globals(),),
             arguments=(None,),
             package_namespace='',
+            filename=None,
             ):
         self.library = library
         self.code_header = code_header
         self.bytecodes = [
             bytecode.getlocal_0(),
             bytecode.pushscope(),
+            bytecode.debugfile(filename),
             ]
         self.namespace = {}
         self.loopstack = [] # pairs of continue label and break label
@@ -236,6 +238,8 @@ class CodeFragment:
         self.class_name = class_name
         self.parent_namespaces = parent_namespaces
         self.arguments = arguments
+        self.filename = filename
+        self.current_line = None
         for (i, v) in enumerate(arguments):
             self.namespace[v] = Register(i)
         self.exec_suite(ast)
@@ -299,6 +303,8 @@ class CodeFragment:
 
     def push_value(self, node):
         try:
+            if self.current_line != node.lineno:
+                self.bytecodes.append(bytecode.debugline(node.lineno))
             visitor = getattr(self, 'visit_'+self.visitors[type(node)])
         except KeyError:
             raise NotImplementedError(node)
@@ -306,6 +312,8 @@ class CodeFragment:
 
     def execute(self, node):
         try:
+            if self.current_line != node.lineno:
+                self.bytecodes.append(bytecode.debugline(node.lineno))
             visitor = getattr(self, 'visit_'+self.visitors[type(node)])
         except KeyError:
             raise NotImplementedError(node)
@@ -347,7 +355,9 @@ class CodeFragment:
             private_namespace=self.private_namespace,
             parent_namespaces=(self,) + self.parent_namespaces,
             package_namespace=package,
-            class_name=node.name.value)
+            class_name=node.name.value,
+            filename=self.filename,
+            )
         self.code_header.add_method_body('', frag)
         assert len(node.bases) <= 1
         if not node.bases:
@@ -378,13 +388,17 @@ class CodeFragment:
             frag = CodeFragment(node.body, self.library, self.code_header,
                 parent_namespaces=(self,) + self.parent_namespaces,
                 private_namespace=self.private_namespace,
-                arguments=list(map(attrgetter('value'), node.arguments)))
+                arguments=list(map(attrgetter('value'), node.arguments)),
+                filename=self.filename,
+                )
             self.namespace[node.name.value] = Method(frag)
         else:
             frag = CodeFragment(node.body, self.library, self.code_header,
                 private_namespace=self.private_namespace,
                 parent_namespaces=self.parent_namespaces,
-                method_prefix=self.method_prefix+self.private_namespace+':')
+                method_prefix=self.method_prefix+self.private_namespace+':',
+                filename=self.filename,
+                )
             self.namespace[node.name[0]] = Function(frag)
         self.code_header.add_method_body(self.method_prefix+node.name.value, frag)
 
@@ -753,9 +767,12 @@ def main():
         globals['Math'] = Class(lib.get_class('', 'Math'))
         globals['String'] = Class(lib.get_class('', 'String'))
         globals['Number'] = Class(lib.get_class('', 'Number'))
+        globals['TypeError'] = Class(lib.get_class('', 'TypeError'))
     code_header = CodeHeader(args[0])
     frag = CodeFragment(ast, lib, code_header,
-        private_namespace=args[0]+'$23')
+        private_namespace=args[0]+'$23',
+        filename=args[0],
+        )
     code_header.add_method_body('', frag)
     code_header.add_main_script(frag)
     code_tag = code_header.make_tag()
