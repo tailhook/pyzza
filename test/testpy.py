@@ -4,44 +4,51 @@ from flash.text import TextFormat
 from flash.display import StageAlign
 from flash.events import Event
 
+class Failure(Error):
+    def __init__(self, message):
+        super().__init__()
+        self.message = message
+
 class Test:
     """Base class for all tests"""
     def __init__(self, reporter, name):
         self.name = name
         self.reporter = reporter
-        self.result = True
     def assertTrue(self, val):
         self.reporter.add_assert()
         if not val:
-            self.result = False
+            raise Failure("Assertion failed ``" + val + "'' is not True")
     def assertFalse(self, val):
         self.reporter.add_assert()
         if val:
-            self.result = False
+            raise Failure("Assertion failed ``" + val + "'' is not False")
     def assertEquals(self, a, b):
         self.reporter.add_assert()
         if a != b:
-            self.result = False
+            raise Failure("Assertion failed ``" + a + "'' != ``" + b + "''")
     def assertFloatEquals(self, a, b):
         self.reporter.add_assert()
         if -0.001 < a - b < 0.001:
-            self.result = False
+            raise Failure("Assertion failed ``" + a + "'' != ``" + b + "''")
     def assertNotEquals(self, a, b):
         self.reporter.add_assert()
         if a == b:
-            self.result = False
+            raise Failure("Assertion failed ``" + a + "'' == ``" + b + "''")
     def assertFloatNotEquals(self, a, b):
         self.reporter.add_assert()
         dif = a-b
         if dif > 0.001 or dif < -0.001:
-            self.result = False
+            raise Failure("Assertion failed ``" + a + "'' != ``" + b + "''")
     def run(self):
         self.reporter.start(self.name)
-        self.test()
-        if self.result:
-            self.reporter.ok()
+        try:
+            self.test()
+        except Failure as f:
+            self.reporter.fail(f)
+        except Error as e:
+            self.reporter.error(e)
         else:
-            self.reporter.fail()
+            self.reporter.ok()
 
 class TestMath(Test):
     def __init__(self, reporter, name):
@@ -139,6 +146,10 @@ class Exceptions(Test):
     def test(self):
         self.testSimple()
         self.testNoMethod()
+        self.testMethOk()
+        self.testMethError()
+        self.testArgError()
+        self.testErrorSubclass()
 
     def testSimple(self):
         s = "None"
@@ -156,6 +167,55 @@ class Exceptions(Test):
             s = e.getStackTrace()
         self.assertTrue(s.indexOf('hello is not a function') >= 0)
         self.assertTrue(s.indexOf('testNoMethod()') >= 0)
+
+    def testTest(self):
+        pass
+
+    def testMethOk(self):
+        try:
+            self.testTest()
+        except:
+            a = 'Error'
+        else:
+            a = 'OK'
+        self.assertEquals(a, 'OK')
+
+    def testMethError(self):
+        try:
+            self.testTest(1, 2)
+        except TypeError as e:
+            a = 'TypeError'
+        except:
+            a = 'Error'
+        else:
+            a = 'OK'
+        self.assertEquals(a, 'Error')
+
+    def testArgError(self):
+        try:
+            self.testTest(1, 2)
+        except TypeError as e:
+            a = 'TypeError'
+        except ArgumentError as e:
+            a = 'ArgumentError'
+        except:
+            a = 'Error'
+        else:
+            a = 'OK'
+        self.assertEquals(a, 'ArgumentError')
+
+    def testErrorSubclass(self):
+        try:
+            self.testTest(1, 2)
+        except TypeError as e:
+            a = 'TypeError'
+        except Error as e:
+            a = 'ErrError'
+        except:
+            a = 'Error'
+        else:
+            a = 'OK'
+        self.assertEquals(a, 'ErrError')
 
 class Reporter:
     def __init__(self, textlabel):
@@ -177,10 +237,16 @@ class Reporter:
         self.textlabel.appendText('OK\n')
         self.successful += 1
 
-    def fail(self):
+    def fail(self, failure):
         if not self.at_start:
             self.textlabel.appendText('... ')
-        self.textlabel.appendText('Fail\n')
+        self.textlabel.appendText('Fail: '+failure.message+'\n')
+        self.failed += 1
+
+    def error(self, error):
+        if not self.at_start:
+            self.textlabel.appendText('... ')
+        self.textlabel.appendText('Error: '+error.getStackTrace()+'\n')
         self.failed += 1
 
     def add_assert(self):

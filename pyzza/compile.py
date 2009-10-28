@@ -593,12 +593,13 @@ class CodeFragment:
         assert void
         startlabel = bytecode.Label()
         endbodylabel = bytecode.Label()
+        elselabel = bytecode.Label()
         endlabel = bytecode.Label()
 
         self.bytecodes.append(startlabel)
         self.exec_suite(node.body)
         self.bytecodes.append(endbodylabel)
-        self.bytecodes.append(bytecode.jump(endlabel))
+        self.bytecodes.append(bytecode.jump(elselabel))
         for exc in node.excepts + [node.except_]:
             if not exc: continue
             catchlabel = bytecode.Label()
@@ -634,6 +635,9 @@ class CodeFragment:
                 self.bytecodes.append(bytecode.kill(reg))
                 del self.namespace[exc[1].value]
             self.bytecodes.append(bytecode.jump(endlabel))
+        self.bytecodes.append(elselabel)
+        if node.else_:
+            self.exec_suite(node.else_)
         self.bytecodes.append(endlabel)
 
     def visit_return(self, node, void):
@@ -767,7 +771,9 @@ def main():
         globals['Math'] = Class(lib.get_class('', 'Math'))
         globals['String'] = Class(lib.get_class('', 'String'))
         globals['Number'] = Class(lib.get_class('', 'Number'))
+        globals['Error'] = Class(lib.get_class('', 'Error'))
         globals['TypeError'] = Class(lib.get_class('', 'TypeError'))
+        globals['ArgumentError'] = Class(lib.get_class('', 'ArgumentError'))
     code_header = CodeHeader(args[0])
     frag = CodeFragment(ast, lib, code_header,
         private_namespace=args[0]+'$23',

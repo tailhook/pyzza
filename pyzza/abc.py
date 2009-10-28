@@ -523,7 +523,10 @@ class ExceptionInfo(ABCStruct):
         stream.write_u30(self.exc_to)
         stream.write_u30(self.target)
         stream.write_u30(index.get_multiname_index(self.exc_type))
-        stream.write_u30(index.get_multiname_index(self.var_name))
+        if self.var_name:
+            stream.write_u30(index.get_multiname_index(self.var_name))
+        else:
+            stream.write_u30(0)
 
     def get_labels(self, alllabels):
         self.exc_from = alllabels[self.exc_from]

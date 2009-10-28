@@ -40,6 +40,7 @@ Differences from Python
  * global functions like ``range()``, ``len()`` etc. are not functions, they are
     reserved words. Also ``range()`` works only inside ``for`` statement
  * only positional arguments supported
+ * only constant default values for arguments supported
 
 Differences from ActionScript
 -----------------------------

@@ -2,20 +2,20 @@ Fix call of super and constructors (seems done, but check please)
 Make overridable methods
 Implement try...finally
 Implement compilation of all node types (arithmetics, etc.)
+Implement subscription (square brackets)
 Implement while loop
-Implement loop primitives (range, keys, values, items)
+Implement loop primitives (range, keys, values, items, zip, enumerate)
 For creates new variables. Fix, so that it can reuse variable
 Fill global namespace
-Write debugging info
 Make syntax error reporting even better
 Allow other functions
 Implement function closures
 Allow other files
-Try merging several DoABC tags for optimization
-Use try...except in unittests
 Mandatory optimizations:
     * remove zero jumps
     * "getlocal 1" -> "getlocal_1"
 Optional optimisations:
     * optimize constant arithmetics (easy)
     * reuse variables (hard)
+    * merging several DoABC tags (moderate, but tedious)
+    * ifs with single comparison optimize to specialized jump

@@ -626,7 +626,7 @@ class bytecodes(metaclass=gather_bytecodes):
     class lessthan(BinaryBytecode):
         code = 0xad
 
-    class lookupswitch(BinaryBytecode):
+    class lookupswitch(Bytecode):
         __slots__ = ('default_offset', 'case_offsets')
         code = 0x1b
         def _read(self, stream, index):
