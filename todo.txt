@@ -1,11 +1,9 @@
-Fix call of super and constructors (seems done, but check please)
-Make overridable methods
 Implement try...finally
 Implement compilation of all node types (arithmetics, etc.)
 Implement subscription (square brackets)
 Implement while loop
 Implement loop primitives (range, keys, values, items, zip, enumerate)
-For creates new variables. Fix, so that it can reuse variable
+For and except create new variables. Fix, so that they can reuse variables
 Fill global namespace
 Make syntax error reporting even better
 Allow other functions

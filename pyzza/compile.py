@@ -69,9 +69,15 @@ class CodeHeader:
         for (k, m) in frag.namespace.items():
             if k == '__init__': continue
             if isinstance(m, Method):
+                flag = 0
+                for b in bases:
+                    if b.has_method(k):
+                        flag = abc.TraitsInfo.ATTR_Override
+                        break
                 traits.append(abc.TraitsInfo(
                     abc.QName(abc.NSPackage(package), k),
-                    abc.TraitMethod(m.code_fragment._method_info)))
+                    abc.TraitMethod(m.code_fragment._method_info),
+                    attr=flag))
             elif isinstance(m, Register):
                 pass #nothing needed
             else:
@@ -527,7 +533,17 @@ class CodeFragment:
                 self.push_value(i)
             self.bytecodes.append(bytecode.constructsuper(len(node.arguments)))
         else:
-            raise NotImplementedError()
+            self.bytecodes.append(bytecode.getlocal_0())
+            for i in node.arguments:
+                self.push_value(i)
+            if void:
+                self.bytecodes.append(bytecode.callsupervoid(
+                    abc.QName(abc.NSPackage(''), node.method.value),
+                    len(node.arguments)))
+            else:
+                self.bytecodes.append(bytecode.callsuper(
+                    abc.QName(abc.NSPackage(''), node.method.value),
+                    len(node.arguments)))
 
     ##### Flow control #####
 

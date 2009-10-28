@@ -74,4 +74,8 @@ class AS3Class:
             return None
         return lib.get_class(sn.namespace.name, sn.name)
 
-
+    def has_method(self, name):
+        for t in self.class_info.instance_info.trait:
+            if isinstance(t.data, abc.TraitMethod) \
+                and t.name.name == name:
+                return True

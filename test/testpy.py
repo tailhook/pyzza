@@ -217,6 +217,43 @@ class Exceptions(Test):
             a = 'OK'
         self.assertEquals(a, 'ErrError')
 
+class A:
+    def __init__(self):
+        pass
+
+    def hello(self):
+        return 'hello'
+
+    def world(self):
+        return self.hello() + ' baby'
+
+class B(A):
+    def __init__(self):
+        super().__init__()
+
+    def hello(self):
+        return 'Hello!'
+
+    def world(self):
+        return super().world() + ' bear'
+
+class TestClass(Test):
+    def __init__(self, reporter, name):
+        super().__init__(reporter, name)
+
+    def test(self):
+        self.testOverride()
+
+    def testOverride(self):
+        self.assertEquals(A().hello(), 'hello')
+        self.assertEquals(B().hello(), 'Hello!')
+        a = A()
+        self.assertEquals(a.hello(), 'hello')
+        self.assertEquals(a.world(), 'hello baby')
+        a = B()
+        self.assertEquals(a.hello(), 'Hello!')
+        self.assertEquals(a.world(), 'Hello! baby bear')
+
 class Reporter:
     def __init__(self, textlabel):
         self.textlabel = textlabel
@@ -289,4 +326,5 @@ class Main(Sprite):
         TestMath(self.reporter, 'Math').run()
         Loops(self.reporter, 'Loops').run()
         Exceptions(self.reporter, 'Exceptions').run()
+        TestClass(self.reporter, 'Classes').run()
         self.reporter.finish()

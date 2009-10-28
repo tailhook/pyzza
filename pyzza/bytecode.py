@@ -227,7 +227,7 @@ class bytecodes(metaclass=gather_bytecodes):
 
     class callsuper(PropertyBytecode):
         format = (
-            ('property', MultinameInfo, 'multiname', io.u30),
+            ('method', MultinameInfo, 'multiname', io.u30),
             ('arg_count', int, None, io.u30),
             )
         code = 0x45
@@ -240,7 +240,7 @@ class bytecodes(metaclass=gather_bytecodes):
 
     class callsupervoid(PropertyBytecode):
         format = (
-            ('property', MultinameInfo, 'multiname', io.u30),
+            ('method', MultinameInfo, 'multiname', io.u30),
             ('arg_count', int, None, io.u30),
             )
         code = 0x4e
