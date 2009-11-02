@@ -3,6 +3,7 @@ from flash.text import TextField
 from flash.text import TextFormat
 from flash.display import StageAlign
 from flash.events import Event
+from flash.utils import Dictionary
 
 class Failure(Error):
     def __init__(self, message):
@@ -57,6 +58,7 @@ class Data(Test):
     def test(self):
         self.testMakeList()
         self.testMakeDict()
+        self.testUnpack()
 
     def testMakeList(self):
         a = [1, 2]
@@ -82,6 +84,32 @@ class Data(Test):
         self.assertEquals(c['test'], undefined)
         c['test'] = 2
         self.assertEquals(c['test'], 2)
+        c.test = 3
+        self.assertEquals(c['test'], 3)
+        self.assertEquals(c.test, 3)
+
+    def repr(self, val):
+        res = []
+        for a, b in items(val):
+            res.push(a + ': ' + b)
+        return '{' + res.join(',') + '}'
+
+    def testUnpack(self):
+        a, b = [1,2]
+        self.assertEquals(a, 1)
+        self.assertEquals(b, 2)
+        a = ["one", "two", "three"]
+        a, b, c = a
+        self.assertEquals(a, "one")
+        self.assertEquals(b, "two")
+        self.assertEquals(c, "three")
+        a = {}
+        b = {}
+        c = {}
+        a.val, b.val, c.val = ["one", "two", "three"]
+        self.assertEquals(c.val, "three")
+        self.assertEquals(b.val, "two")
+        self.assertEquals(a.val, "one")
 
 class TestMath(Test):
     def __init__(self, reporter, name):
@@ -323,6 +351,35 @@ class Loops(Test):
             self.assertTrue('abc'.indexOf(v.charAt(0)) >= 0)
             self.assertTrue(v.charAt(0) == v.charAt(1))
             self.assertTrue(v.length == 2)
+        self.assertEquals(j, 3)
+        j = 0
+        for k in values([7, 15, 23, 3]):
+            self.assertTrue(k % 7 == j)
+            j += 1
+        self.assertEquals(j, 4)
+        j = 0
+        d = Dictionary()
+        for k, v in values([[2, 12], [8, 3], [6, 4]]):
+            j += 1
+            self.assertEquals(k*v, 24)
+            d[[k,v]] = k%v
+        self.assertEquals(j, 3)
+        j = 0
+        for a, b in keys(d):
+            j += 1
+            self.assertEquals(k*v, 24)
+        self.assertEquals(j, 3)
+        j = 0
+        for k, v in items(d):
+            j += 1
+            self.assertEquals(k[0]*k[1], 24)
+            self.assertEquals(k[0]%k[1], v)
+        self.assertEquals(j, 3)
+        j = 0
+        for (a, b), v in items(d):
+            j += 1
+            self.assertEquals(a*b, 24)
+            self.assertEquals(a%b, v)
         self.assertEquals(j, 3)
 
 class Exceptions(Test):

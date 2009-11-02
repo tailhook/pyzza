@@ -450,6 +450,8 @@ def Test(child, ctx):
 def GenExp(child, ctx):
     if len(child) < 2:
         return child[0]
+    if getattr(child[1], 'value', None) != 'for':
+        return Tuple(child, ctx)
     raise NotImplementedError(child)
 
 class Binary(Node):
@@ -618,8 +620,9 @@ tokens = {
     token.PLUS: Op,
     token.MINUS: Op,
     token.STAR: Op,
-    token.NUMBER: Number,
     token.SLASH: Op,
+    token.PERCENT: Op,
+    token.NUMBER: Number,
     token.COMMA: Nop,
     token.GREATER: Op,
     token.GREATEREQUAL: Op,

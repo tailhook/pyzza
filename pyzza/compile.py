@@ -247,6 +247,10 @@ class NameCheck:
     def visit_assign(self, node):
         if isinstance(node.target, parser.Name):
             self.localnames.add(node.target.value)
+        elif isinstance(node.target, parser.Tuple):
+            for n in node.target:
+                if isinstance(n, parser.Name):
+                    self.localnames.add(n.value)
         for n in node:
             self.visit(n)
 
@@ -254,6 +258,10 @@ class NameCheck:
         for v in node.var:
             if isinstance(v, parser.Name):
                 self.localnames.add(v.value)
+            elif isinstance(v, parser.Tuple):
+                for n in v:
+                    if isinstance(n, parser.Name):
+                        self.localnames.add(n.value)
             else:
                 raise NotImplementedError(v)
         for n in node:
@@ -572,6 +580,9 @@ class CodeFragment:
             self.push_value(target.index)
             if _swap:
                 raise NotImplementedError(target)
+        elif isinstance(target, parser.Tuple):
+            if _swap:
+                raise NotImplementedError(target)
         else:
             raise NotImplementedError(target)
         try:
@@ -591,6 +602,14 @@ class CodeFragment:
             elif isinstance(target, parser.Subscr):
                 self.bytecodes.append(bytecode.setproperty(
                     abc.MultinameL(abc.NamespaceSetInfo(abc.NSPackage('')))))
+            elif isinstance(target, parser.Tuple):
+                for (idx, node) in enumerate(target):
+                    if idx < len(target)-1:
+                        self.bytecodes.append(bytecode.dup())
+                    self.bytecodes.append(bytecode.pushbyte(idx))
+                    self.bytecodes.append(bytecode.getproperty(
+                       abc.MultinameL(abc.NamespaceSetInfo(abc.NSPackage('')))))
+                    self.do_assign(node)
             else:
                 raise NotImplementedError(target)
 
@@ -885,20 +904,21 @@ class CodeFragment:
                     contlabel = bytecode.Label()
                     bodylabel = bytecode.label()
                     self.push_value(node.expr.arguments[0])
+                    self.bytecodes.append(bytecode.coerce_a())
                     self.bytecodes.append(bytecode.setlocal(obj))
                     self.bytecodes.append(bytecode.pushbyte(0))
                     self.bytecodes.append(bytecode.setlocal(idx))
                     self.bytecodes.append(bytecode.jump(contlabel))
                     self.bytecodes.append(bodylabel)
                     if val.name == 'keys':
-                        assert len(node.var) == 1
-                        with self.assign(node.var[0]):
+                        var = node.var[0] if len(node.var) == 1 else node.var
+                        with self.assign(var):
                             self.bytecodes.append(bytecode.getlocal(obj))
                             self.bytecodes.append(bytecode.getlocal(idx))
                             self.bytecodes.append(bytecode.nextname())
                     elif val.name == 'values':
-                        assert len(node.var) == 1
-                        with self.assign(node.var[0]):
+                        var = node.var[0] if len(node.var) == 1 else node.var
+                        with self.assign(var):
                             self.bytecodes.append(bytecode.getlocal(obj))
                             self.bytecodes.append(bytecode.getlocal(idx))
                             self.bytecodes.append(bytecode.nextvalue())
