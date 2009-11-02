@@ -40,7 +40,9 @@ class CodeHeader:
         mi.param_type = [abc.AnyType() for i in frag.arguments[1:]]
         mi.return_type = abc.AnyType()
         mi.name = name
-        mi.flags = 0 # no features supported yet
+        mi.flags = 0
+        if hasattr(frag, 'activation'):
+            mi.flags |= abc.MethodInfo.NEED_ACTIVATION
         self.tag.real_body.method_info.append(mi)
         frag._method_info = mi
         mb = abc.MethodBodyInfo()
@@ -50,7 +52,14 @@ class CodeHeader:
         mb.init_scope_depth = frag.scope_stack_init
         mb.max_scope_depth = frag.scope_stack_max
         mb.exception_info = frag.exceptions
-        mb.traits_info = []
+        traits = []
+        for (k, v) in frag.namespace.items():
+            if isinstance(v, ClosureSlot):
+                traits.append(abc.TraitsInfo(
+                    abc.QName(abc.NSInternal(), k),
+                    abc.TraitSlot(v.index),
+                    attr=0))
+        mb.traits_info = traits
         mb.bytecode = frag.bytecodes
         self.tag.real_body.method_body_info.append(mb)
 
@@ -140,8 +149,11 @@ class Register(NameType):
 class Builtin(NameType):
     """Some built-in (for global namespace)"""
 
-class Property(NameType):
-    """#Don't remember"""
+class ClosureSlot(NameType):
+    """Closure variable"""
+    def __init__(self, idx, name):
+        self.index = idx
+        self.name = name
 
 class Method(NameType):
     """Method (for class namespace)"""
@@ -164,6 +176,7 @@ globals = {
     'True': True,
     'False': False,
     'None': None,
+    'undefined': abc.Undefined(),
     'range': Builtin('range'),
     'keys': Builtin('keys'),
     'items': Builtin('items'),
@@ -173,6 +186,107 @@ globals = {
 
 class Globals:
     namespace = globals
+
+class NameCheck:
+    visitors = {
+        parser.Func: 'function',
+        parser.Class: 'class',
+        parser.Assign: 'assign',
+        parser.For: 'for',
+        parser.Try: 'try',
+        parser.Name: 'varname',
+        parser.GetAttr: 'getattr',
+        parser.CallAttr: 'callattr',
+        parser.Super: 'super',
+        }
+
+    def __init__(self, node):
+        self.allnames = set()
+        if hasattr(node, 'arguments'):
+            self.localnames = set(map(attrgetter('value'), node.arguments))
+        else:
+            self.localnames = set()
+        self.functions = []
+        for n in (node.body if hasattr(node, 'body') else node):
+            assert n is not None, node
+            self.visit(n)
+        self.annotate(node)
+
+    def annotate(self, node):
+        exvars = set()
+        for f in self.functions:
+            exvars.update(f.func_globals & self.localnames)
+        node.func_export = frozenset(exvars)
+        node.func_locals = frozenset(self.localnames)
+        node.func_globals = frozenset(self.allnames - self.localnames)
+        #~ print(getattr(node, 'name', None),
+            #~ node.func_globals, node.func_locals, node.func_export)
+
+    def visit_function(self, node):
+        NameCheck(node)
+        self.localnames.add(node.name.value)
+        self.functions.append(node)
+
+    def visit_class(self, node):
+        NameCheck(node)
+        self.functions.append(node)
+
+    def visit_getattr(self, node):
+        self.visit(node.expr)
+
+    def visit_callattr(self, node):
+        self.visit(node.expr)
+        for a in node.arguments:
+            self.visit(a)
+
+    def visit_super(self, node):
+        for a in node.arguments:
+            self.visit(a)
+
+    def visit_assign(self, node):
+        if isinstance(node.target, parser.Name):
+            self.localnames.add(node.target.value)
+        for n in node:
+            self.visit(n)
+
+    def visit_for(self, node):
+        for v in node.var:
+            if isinstance(v, parser.Name):
+                self.localnames.add(v.value)
+            else:
+                raise NotImplementedError(v)
+        for n in node:
+            self.visit(n)
+
+    def visit_try(self, node):
+        for (t, v, b) in node.excepts:
+            if v is None:
+                pass
+            elif isinstance(v, parser.Name):
+                self.localnames.add(v.value)
+            else:
+                raise NotImplementedError(v)
+        for n in node:
+            self.visit(n)
+
+    def visit_varname(self, node):
+        self.allnames.add(node.value)
+
+    def visit(self, node):
+        try:
+            visitor = self.visitors[type(node)]
+        except KeyError:
+            try:
+                ch = iter(node)
+            except AttributeError:
+                pass # leaf node
+            else:
+                for n in node:
+                    assert n is not None, node
+                    self.visit(n)
+        else:
+            getattr(self, 'visit_' + visitor)(node)
+
 
 class CodeFragment:
     """
@@ -190,6 +304,7 @@ class CodeFragment:
         parser.String: 'string',
         parser.CallAttr: 'callattr',
         parser.GetAttr: 'getattr',
+        parser.Subscr: 'subscr',
         parser.Super: 'super',
         parser.Add: 'add',
         parser.Subtract: 'subtract',
@@ -201,6 +316,7 @@ class CodeFragment:
         parser.Raise: 'raise',
         parser.If: 'if',
         parser.For: 'for',
+        parser.While: 'while',
         parser.Try: 'try',
         parser.Break: 'break',
         parser.Continue: 'continue',
@@ -214,6 +330,8 @@ class CodeFragment:
         parser.Or: 'or',
         parser.And: 'and',
         parser.Negate: 'negate',
+        parser.ListMaker: 'list',
+        parser.DictMaker: 'dict',
         }
     max_stack = None
     local_count = None
@@ -222,7 +340,6 @@ class CodeFragment:
     def __init__(self, ast, library, code_header,
             private_namespace,
             class_name=None,
-            method_prefix=None,
             parent_namespaces=(Globals(),),
             arguments=(None,),
             package_namespace='',
@@ -231,24 +348,39 @@ class CodeFragment:
         self.library = library
         self.code_header = code_header
         self.bytecodes = [
+            bytecode.debugfile(filename),
+            bytecode.debugline(getattr(ast, 'lineno', 0)),
             bytecode.getlocal_0(),
             bytecode.pushscope(),
-            bytecode.debugfile(filename),
             ]
-        self.namespace = {}
+        self.namespace = {k: Register() for k in ast.func_locals
+            if k not in ast.func_export}
+        if ast.func_export:
+            self.activation = Register()
+            self.bytecodes.append(bytecode.newactivation())
+            self.bytecodes.append(bytecode.dup())
+            self.bytecodes.append(bytecode.pushscope())
+            self.bytecodes.append(bytecode.setlocal(self.activation))
+            self.namespace.update((k, ClosureSlot(idx+1, k))
+                for (idx, k) in enumerate(ast.func_export))
         self.loopstack = [] # pairs of continue label and break label
         self.exceptions = []
         self.private_namespace = private_namespace
         self.package_namespace = package_namespace
-        self.method_prefix = method_prefix or private_namespace + ':'
         self.class_name = class_name
         self.parent_namespaces = parent_namespaces
         self.arguments = arguments
         self.filename = filename
         self.current_line = None
         for (i, v) in enumerate(arguments):
-            self.namespace[v] = Register(i)
-        self.exec_suite(ast)
+            if v in ast.func_export:
+                self.bytecodes.append(bytecode.getlocal(
+                    self.activation))
+                self.bytecodes.append(bytecode.getlocal(Register(i)))
+                self.bytecodes.append(bytecode.setslot(self.namespace[v].index))
+            else:
+                self.namespace[v] = Register(i)
+        self.exec_suite(ast.body if hasattr(ast, 'body') else ast)
         self.bytecodes.append(bytecode.returnvoid())
         self.fix_registers()
         self.verify_stack()
@@ -298,7 +430,7 @@ class CodeFragment:
                         raise StackError("Unbalanced stack at {!r}".format(bcode))
                 else:
                     bcode.offset._verify_stack = stack_size
-            #print('[{:3d} -{:2d}] {}'.format(old_stack, stack_size, bcode))
+            #~ print('[{:3d} -{:2d}] {}'.format(old_stack, stack_size, bcode))
             if stack_size > max_stack_size:
                 max_stack_size = stack_size
         if stack_size != 0:
@@ -308,22 +440,21 @@ class CodeFragment:
     ##### Utility #####
 
     def push_value(self, node):
-        try:
-            if self.current_line != node.lineno:
-                self.bytecodes.append(bytecode.debugline(node.lineno))
-            visitor = getattr(self, 'visit_'+self.visitors[type(node)])
-        except KeyError:
-            raise NotImplementedError(node)
-        visitor(node, False)
+        self.execute(node, False)
 
-    def execute(self, node):
+    def execute(self, node, void=True):
+        oldline = self.current_line
+        if self.current_line != node.lineno:
+            self.bytecodes.append(bytecode.debugline(node.lineno))
+            self.current_line = node.lineno
         try:
-            if self.current_line != node.lineno:
-                self.bytecodes.append(bytecode.debugline(node.lineno))
             visitor = getattr(self, 'visit_'+self.visitors[type(node)])
         except KeyError:
             raise NotImplementedError(node)
-        visitor(node, True)
+        else:
+            visitor(node, void)
+        finally:
+            self.current_line = oldline
 
     def exec_suite(self, suite):
         for line in suite:
@@ -336,6 +467,12 @@ class CodeFragment:
         else:
             raise NameError(name)
         return ns.namespace[name]
+
+    def qname(self, name):
+        return abc.QName(abc.NSPackage(self.package_namespace), name)
+
+    def qintern(self, name):
+        return abc.QName(abc.NSInternal(), name)
 
     ##### Visitors #####
 
@@ -357,7 +494,7 @@ class CodeFragment:
                     package = i.arguments[0].value
                 else:
                     raise NotImplementedError("No decorator ``{}''".format(i.name))
-        frag = CodeFragment(node.body, self.library, self.code_header,
+        frag = CodeFragment(node, self.library, self.code_header,
             private_namespace=self.private_namespace,
             parent_namespaces=(self,) + self.parent_namespaces,
             package_namespace=package,
@@ -385,45 +522,62 @@ class CodeFragment:
         for i in range(len(bases)):
             self.bytecodes.append(bytecode.popscope())
         self.bytecodes.append(bytecode.initproperty(
-            abc.QName(abc.NSPackage(package), node.name.value)))
+            self.qname(node.name.value)))
         self.namespace[node.name.value] = NewClass(frag, cls)
 
     def visit_function(self, node, void):
         assert void == True
         if self.class_name is not None:
-            frag = CodeFragment(node.body, self.library, self.code_header,
-                parent_namespaces=(self,) + self.parent_namespaces,
+            frag = CodeFragment(node, self.library, self.code_header,
+                parent_namespaces=self.parent_namespaces,
                 private_namespace=self.private_namespace,
                 arguments=list(map(attrgetter('value'), node.arguments)),
                 filename=self.filename,
                 )
             self.namespace[node.name.value] = Method(frag)
+            self.code_header.add_method_body(
+                '{}/{}'.format(self.class_name, node.name.value),
+                frag)
         else:
-            frag = CodeFragment(node.body, self.library, self.code_header,
+            frag = CodeFragment(node, self.library, self.code_header,
                 private_namespace=self.private_namespace,
-                parent_namespaces=self.parent_namespaces,
-                method_prefix=self.method_prefix+self.private_namespace+':',
+                parent_namespaces=(self,) + self.parent_namespaces,
+                arguments=[None] + list(
+                    map(attrgetter('value'), node.arguments)),
                 filename=self.filename,
                 )
-            self.namespace[node.name[0]] = Function(frag)
-        self.code_header.add_method_body(self.method_prefix+node.name.value, frag)
+            reg = self.namespace[node.name.value]
+            self.code_header.add_method_body('{}${:d}:{}'.format(self.filename,
+                node.lineno, node.name.value),
+                frag)
+            self.bytecodes.append(bytecode.newfunction(frag._method_info))
+            self.bytecodes.append(bytecode.coerce_a())
+            self.bytecodes.append(bytecode.setlocal(reg))
 
     def visit_assign(self, node, void):
         assert void == True
         if isinstance(node.target, parser.Name):
-            if node.target.value not in self.namespace:
-                reg = self.namespace[node.target.value] = Register()
-            else:
-                reg = self.namespace[node.target.value]
+            reg = self.namespace[node.target.value]
+            if isinstance(reg, ClosureSlot):
+                self.bytecodes.append(bytecode.getlocal(self.activation))
             if node.operator.value != '=':
-                self.bytecodes.append(bytecode.getlocal(reg))
+                if isinstance(reg, Register):
+                    self.bytecodes.append(bytecode.getlocal(reg))
+                elif isinstance(reg, ClosureSlot):
+                    self.bytecodes.append(bytecode.dup())
+                    self.bytecodes.append(bytecode.getslot(reg.index))
+                else:
+                    raise NotImplementedError(reg)
         elif isinstance(node.target, parser.GetAttr):
             self.push_value(node.target.expr)
             if node.operator.value != '=':
                 self.bytecodes.append(bytecode.dup())
                 self.bytecodes.append(bytecode.getproperty(
-                    abc.QName(abc.NSPackage(self.package_namespace),
-                    node.target.name.value)))
+                    self.qname(node.target.name.value)))
+        elif isinstance(node.target, parser.Subscr):
+            self.push_value(node.target.expr)
+            self.push_value(node.target.index)
+            assert node.operator.value == '='
         else:
             raise NotImplementedError(node.target)
         self.push_value(node.expr)
@@ -443,11 +597,18 @@ class CodeFragment:
             raise NotImplementedError(node.operator)
         if isinstance(node.target, parser.Name):
             self.bytecodes.append(bytecode.coerce_a())
-            self.bytecodes.append(bytecode.setlocal(reg))
+            if isinstance(reg, Register):
+                self.bytecodes.append(bytecode.setlocal(reg))
+            elif isinstance(reg, ClosureSlot):
+                self.bytecodes.append(bytecode.setslot(reg.index))
+            else:
+                raise NotImplementedError(reg)
         elif isinstance(node.target, parser.GetAttr):
             self.bytecodes.append(bytecode.setproperty(
-                abc.QName(abc.NSPackage(self.package_namespace),
-                node.target.name.value)))
+                self.qname(node.target.name.value)))
+        elif isinstance(node.target, parser.Subscr):
+            self.bytecodes.append(bytecode.setproperty(
+                abc.MultinameL(abc.NamespaceSetInfo(abc.NSPackage('')))))
         else:
             raise NotImplementedError(node.target)
 
@@ -456,15 +617,32 @@ class CodeFragment:
         if isinstance(name, parser.Name):
             name = name.value
             val = self.find_name(name)
-            self.bytecodes.append(bytecode.findpropstrict(val.property_name))
+            if isinstance(val, (Class, NewClass)):
+                self.bytecodes.append(bytecode.findpropstrict(val.property_name))
+                for i in node.arguments:
+                    self.push_value(i)
+                self.bytecodes.append(bytecode.constructprop(val.property_name,
+                    len(node.arguments)))
+                if void:
+                    self.bytecodes.append(bytecode.pop())
+            elif isinstance(val, Register):
+                self.bytecodes.append(bytecode.getlocal(val))
+                self.bytecodes.append(bytecode.pushnull())
+                for i in node.arguments:
+                    self.push_value(i)
+                self.bytecodes.append(bytecode.call(len(node.arguments)))
+                if void:
+                    self.bytecodes.append(bytecode.pop())
+            else:
+                raise NotImplementedError(val)
+        else:
+            self.push_value(node.expr)
+            self.bytecodes.append(bytecode.pushnull())
             for i in node.arguments:
                 self.push_value(i)
-            self.bytecodes.append(bytecode.constructprop(val.property_name,
-                len(node.arguments)))
+            self.bytecodes.append(bytecode.call(len(node.arguments)))
             if void:
                 self.bytecodes.append(bytecode.pop())
-        else:
-            raise NotImplementedError(name)
 
     def visit_varname(self, node, void):
         if void: return
@@ -481,10 +659,21 @@ class CodeFragment:
             else:
                 self.bytecodes.append(bytecode.pushfalse())
         elif isinstance(val, Register):
+            assert ns is self
             self.bytecodes.append(bytecode.getlocal(val))
+        elif isinstance(val, ClosureSlot):
+            if val.name in self.namespace:
+                self.bytecodes.append(bytecode.getlocal(self.activation))
+                self.bytecodes.append(bytecode.getslot(val.index))
+            else:
+                self.bytecodes.append(bytecode.getlex(self.qintern(val.name)))
         elif isinstance(val, Class):
             self.bytecodes.append(bytecode.getlex(
                 val.cls.name))
+        elif val is None:
+            self.bytecodes.append(bytecode.pushnull())
+        elif val is abc.Undefined():
+            self.bytecodes.append(bytecode.pushundefined())
         else:
             raise NotImplementedError(val)
 
@@ -512,18 +701,24 @@ class CodeFragment:
             self.push_value(i)
         if void:
             self.bytecodes.append(bytecode.callpropvoid(
-                abc.QName(abc.NSPackage(''), node.attribute.value),
+                self.qname(node.attribute.value),
                 len(node.arguments)))
         else:
             self.bytecodes.append(bytecode.callproperty(
-                abc.QName(abc.NSPackage(''), node.attribute.value),
+                self.qname(node.attribute.value),
                 len(node.arguments)))
 
     def visit_getattr(self, node, void):
         if void: return
         self.push_value(node.expr)
+        self.bytecodes.append(bytecode.getproperty(self.qname(node.name.value)))
+
+    def visit_subscr(self, node, void):
+        if void: return
+        self.push_value(node.expr)
+        self.push_value(node.index)
         self.bytecodes.append(bytecode.getproperty(
-            abc.QName(abc.NSPackage(''), node.name.value)))
+            abc.MultinameL(abc.NamespaceSetInfo(abc.NSPackage('')))))
 
     def visit_super(self, node, void):
         if node.method.value == '__init__':
@@ -538,12 +733,31 @@ class CodeFragment:
                 self.push_value(i)
             if void:
                 self.bytecodes.append(bytecode.callsupervoid(
-                    abc.QName(abc.NSPackage(''), node.method.value),
+                    self.qname(node.method.value),
                     len(node.arguments)))
             else:
                 self.bytecodes.append(bytecode.callsuper(
-                    abc.QName(abc.NSPackage(''), node.method.value),
+                    self.qname(node.method.value),
                     len(node.arguments)))
+
+    def visit_list(self, node, void):
+        if void:
+            for i in node:
+                self.execute(i)
+        else:
+            for i in node:
+                self.push_value(i)
+            self.bytecodes.append(bytecode.newarray(len(node)))
+
+    def visit_dict(self, node, void):
+        if void:
+            for i in node:
+                self.execute(i)
+        else:
+            assert len(node) % 2 == 0, node
+            for i in node:
+                self.push_value(i)
+            self.bytecodes.append(bytecode.newobject(len(node)//2))
 
     ##### Flow control #####
 
@@ -564,43 +778,152 @@ class CodeFragment:
     def visit_for(self, node, void):
         assert void == True
         endlabel = bytecode.Label()
+        elselabel = bytecode.Label()
         if isinstance(node.expr, parser.Call) \
             and isinstance(node.expr.expr, parser.Name):
             val = self.find_name(node.expr.expr.value)
             if isinstance(val, Builtin):
                 if val.name == 'range':
                     if len(node.expr.arguments) < 2:
-                        assert len(node.var) == 1, node.var
-                        reg = self.namespace[node.var[0].value] = Register()
-                        amountreg = Register()
-                        bodylab = bytecode.label()
-                        contlab = bytecode.Label()
-                        condlab = bytecode.Label()
-                        self.push_value(node.expr.arguments[0])
-                        self.bytecodes.append(bytecode.setlocal(amountreg))
-                        self.bytecodes.append(bytecode.pushbyte(0))
-                        self.bytecodes.append(bytecode.setlocal(reg))
-                        self.bytecodes.append(bytecode.jump(condlab))
-                        self.bytecodes.append(bodylab)
-                        self.loopstack.append((contlab, endlabel))
-                        self.exec_suite(node.body)
-                        self.loopstack.pop()
-                        self.bytecodes.append(contlab)
-                        self.bytecodes.append(bytecode.getlocal(reg))
-                        self.bytecodes.append(bytecode.increment_i())
-                        self.bytecodes.append(bytecode.setlocal(reg))
-                        self.bytecodes.append(condlab)
-                        self.bytecodes.append(bytecode.getlocal(reg))
-                        self.bytecodes.append(bytecode.getlocal(amountreg))
-                        self.bytecodes.append(bytecode.iflt(bodylab))
+                        start = parser.Number('0', ('',(node.expr.lineno,
+                            node.expr.col)))
+                        step = 1
+                        stop = node.expr.arguments[0]
                     else:
-                        raise NotImplementedError()
+                        start = node.expr.arguments[0]
+                        stop = node.expr.arguments[1]
+                        if len(node.expr.arguments) > 2:
+                            assert len(node.expr.arguments) == 3, node.expr
+                            step = node.expr.arguments[2]
+                            if isinstance(step, parser.Number)\
+                                and step.value == 1:
+                                step = 1
+                        else:
+                            step = 1
+                    assert len(node.var) == 1, node.var
+                    val = self.namespace[node.var[0].value]
+                    stepreg = Register()
+                    iterreg = Register()
+                    stopreg = Register()
+                    bodylab = bytecode.label()
+                    contlab = bytecode.Label()
+                    condlab = bytecode.Label()
+                    self.push_value(start)
+                    self.bytecodes.append(bytecode.convert_i())
+                    self.bytecodes.append(bytecode.setlocal(iterreg))
+                    self.push_value(stop)
+                    self.bytecodes.append(bytecode.convert_i())
+                    self.bytecodes.append(bytecode.setlocal(stopreg))
+                    if step != 1:
+                        self.push_value(step)
+                        self.bytecodes.append(bytecode.convert_i())
+                        self.bytecodes.append(bytecode.setlocal(stepreg))
+                    self.bytecodes.append(bytecode.jump(condlab))
+                    self.bytecodes.append(bodylab)
+                    if isinstance(val, ClosureSlot):
+                        self.bytecodes.append(bytecode.getlocal(
+                            self.activation))
+                    self.bytecodes.append(bytecode.getlocal(iterreg))
+                    if isinstance(val, Register):
+                        self.bytecodes.append(bytecode.coerce_a())
+                        self.bytecodes.append(bytecode.setlocal(val))
+                    elif isinstance(val, ClosureSlot):
+                        self.bytecodes.append(bytecode.setslot(val.index))
+                    else:
+                        raise NotImplementedError(val)
+                    self.loopstack.append((contlab, endlabel))
+                    self.exec_suite(node.body)
+                    self.loopstack.pop()
+                    self.bytecodes.append(contlab)
+                    self.bytecodes.append(bytecode.debugline(node.lineno))
+                    self.bytecodes.append(bytecode.getlocal(iterreg))
+                    if step == 1:
+                        self.bytecodes.append(bytecode.increment_i())
+                    else:
+                        self.bytecodes.append(bytecode.getlocal(stepreg))
+                        self.bytecodes.append(bytecode.add_i())
+                    self.bytecodes.append(bytecode.setlocal(iterreg))
+                    self.bytecodes.append(condlab)
+                    self.bytecodes.append(bytecode.debugline(node.lineno))
+                    if step == 1 or isinstance(step, parser.Number):
+                        self.bytecodes.append(bytecode.getlocal(iterreg))
+                        self.bytecodes.append(bytecode.getlocal(stopreg))
+                        if step == 1 or step.value > 0:
+                            self.bytecodes.append(bytecode.iflt(bodylab))
+                        elif step.value < 0:
+                            self.bytecodes.append(bytecode.ifgt(bodylab))
+                        else:
+                            raise NotImplementedError('Zero range step value')
+                    else:
+                        neglab = bytecode.Label()
+                        self.bytecodes.append(bytecode.pushbyte(0))
+                        self.bytecodes.append(bytecode.getlocal(stepreg))
+                        self.bytecodes.append(bytecode.ifgt(neglab))
+                        self.bytecodes.append(bytecode.getlocal(iterreg))
+                        self.bytecodes.append(bytecode.getlocal(stopreg))
+                        self.bytecodes.append(bytecode.iflt(bodylab))
+                        self.bytecodes.append(bytecode.jump(elselabel))
+                        self.bytecodes.append(neglab)
+                        self.bytecodes.append(bytecode.getlocal(iterreg))
+                        self.bytecodes.append(bytecode.getlocal(stopreg))
+                        self.bytecodes.append(bytecode.ifgt(bodylab))
+                elif val.name in ('keys', 'items', 'values'):
+                    assert len(node.expr.arguments) == 1, node.expr
+                    obj = Register()
+                    idx = Register()
+                    contlabel = bytecode.Label()
+                    bodylabel = bytecode.label()
+                    self.push_value(node.expr.arguments[0])
+                    self.bytecodes.append(bytecode.setlocal(obj))
+                    self.bytecodes.append(bytecode.pushbyte(0))
+                    self.bytecodes.append(bytecode.setlocal(idx))
+                    self.bytecodes.append(bytecode.jump(contlabel))
+                    self.bytecodes.append(bodylabel)
+                    if val.name == 'keys':
+                        assert len(node.var) == 1
+                        var = self.namespace[node.var[0].value]
+                        if isinstance(var, ClosureSlot):
+                            self.bytecodes.append(bytecode.getlocal(
+                                self.activation))
+                        self.bytecodes.append(bytecode.getlocal(obj))
+                        self.bytecodes.append(bytecode.getlocal(idx))
+                        self.bytecodes.append(bytecode.nextname())
+                        if isinstance(var, ClosureSlot):
+                            self.bytecodes.append(bytecode.setslot(var.index))
+                        elif isinstance(var, Register):
+                            self.bytecodes.append(bytecode.setlocal(var))
+                        else:
+                            raise NotImplementedError(var)
+                    self.loopstack.append((contlabel, endlabel))
+                    self.exec_suite(node.body)
+                    self.loopstack.pop()
+                    self.bytecodes.append(contlabel)
+                    self.bytecodes.append(bytecode.hasnext2(obj, idx))
+                    self.bytecodes.append(bytecode.iftrue(bodylabel))
                 else:
                     raise NotImplementedError(val.name)
             else:
                 raise NotImplementedError(node.expr.expr)
         else:
             raise NotImplementedError(node.expr)
+        self.bytecodes.append(elselabel)
+        if node.else_:
+            self.exec_suite(node.else_)
+        self.bytecodes.append(endlabel)
+
+    def visit_while(self, node, void):
+        assert void == True
+        endlabel = bytecode.Label()
+        contlab = bytecode.label()
+        elselab = bytecode.Label()
+        self.bytecodes.append(contlab)
+        self.push_value(node.condition)
+        self.bytecodes.append(bytecode.iffalse(elselab))
+        self.loopstack.append((contlab, endlabel))
+        self.exec_suite(node.body)
+        self.loopstack.pop()
+        self.bytecodes.append(bytecode.jump(contlab))
+        self.bytecodes.append(elselab)
         if node.else_:
             self.exec_suite(node.else_)
         self.bytecodes.append(endlabel)
@@ -627,8 +950,8 @@ class CodeFragment:
             if isinstance(exc, tuple):
                 excinfo.exc_type = self.find_name(exc[0].value).cls.name
                 if exc[1] is not None:
-                    excinfo.var_name = abc.QName(abc.NSPackage(''),exc[1].value)
-                    reg = self.namespace[exc[1].value] = Register()
+                    excinfo.var_name = self.qname(exc[1].value)
+                    reg = self.namespace[exc[1].value]
                 else:
                     excinfo.var_name = None
                 excbody = exc[2]
@@ -640,16 +963,32 @@ class CodeFragment:
             self.bytecodes.append(catchlabel)
             self.bytecodes.append(bytecode.getlocal_0())
             self.bytecodes.append(bytecode.pushscope())
+            if hasattr(self, 'activation'):
+                self.bytecodes.append(bytecode.getlocal(self.activation))
+                self.bytecodes.append(bytecode.pushscope())
             self.bytecodes.append(bytecode.newcatch(excinfo))
             self.bytecodes.append(bytecode.pop())
             if reg is None:
                 self.bytecodes.append(bytecode.pop())
-            else:
+            elif isinstance(reg, Register):
                 self.bytecodes.append(bytecode.setlocal(reg))
+            elif isinstance(reg, ClosureSlot):
+                self.bytecodes.append(bytecode.getlocal(self.activation))
+                self.bytecodes.append(bytecode.swap())
+                self.bytecodes.append(bytecode.setslot(reg.index))
+            else:
+                raise NotImplementedError(reg)
             self.exec_suite(excbody)
-            if reg is not None:
+            if reg is None:
+                pass
+            elif isinstance(reg, Register):
                 self.bytecodes.append(bytecode.kill(reg))
-                del self.namespace[exc[1].value]
+            elif isinstance(reg, ClosureSlot):
+                self.bytecodes.append(bytecode.getlocal(self.activation))
+                self.bytecodes.append(bytecode.pushundefined())
+                self.bytecodes.append(bytecode.setslot(reg.index))
+            else:
+                raise NotImplementedError(reg)
             self.bytecodes.append(bytecode.jump(endlabel))
         self.bytecodes.append(elselabel)
         if node.else_:
@@ -791,8 +1130,9 @@ def main():
         globals['TypeError'] = Class(lib.get_class('', 'TypeError'))
         globals['ArgumentError'] = Class(lib.get_class('', 'ArgumentError'))
     code_header = CodeHeader(args[0])
+    NameCheck(ast) # fills closure variable names
     frag = CodeFragment(ast, lib, code_header,
-        private_namespace=args[0]+'$23',
+        private_namespace=args[0]+'$',
         filename=args[0],
         )
     code_header.add_method_body('', frag)

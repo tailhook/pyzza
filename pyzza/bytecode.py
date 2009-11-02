@@ -4,7 +4,7 @@ import sys
 from .io import ABCStream
 from . import io
 from .abc import (MultinameInfo, MethodInfo, ExceptionInfo,
-    ClassInfo, NamespaceInfo, Offset, Slot, Register,
+    ClassInfo, NamespaceInfo, Offset, Register,
     Multiname, MultinameL, QName, RTQName, RTQNameL
     )
 
@@ -425,7 +425,7 @@ class bytecodes(metaclass=gather_bytecodes):
     class getglobalslot(Bytecode):
         code = 0x6e
         format = (
-            ('slotindex', Slot, None, io.u30),
+            ('slotindex', int, None, io.u30),
             )
         stack_after = ('value',)
 
@@ -476,7 +476,7 @@ class bytecodes(metaclass=gather_bytecodes):
     class getslot(Bytecode):
         code = 0x6c
         format = (
-            ('slotindex', Slot, None, io.u30),
+            ('slotindex', int, None, io.u30),
             )
         stack_before = ('obj',)
         stack_after = ('value',)
@@ -489,10 +489,10 @@ class bytecodes(metaclass=gather_bytecodes):
         propertyattr = 'classname'
 
     class greaterequals(BinaryBytecode):
-        code = 0xaf
+        code = 0xb0 #verified in unittests
 
     class greaterthan(BinaryBytecode):
-        code = 0xb0 #probably
+        code = 0xaf #verified in unittests
 
     class hasnext(Bytecode):
         code = 0x1f
@@ -668,6 +668,7 @@ class bytecodes(metaclass=gather_bytecodes):
         @property
         def stack_before(self):
             return tuple('value{}'.format(i) for i in range(self.arg_count))
+        stack_after = ('array',)
 
     class newcatch(Bytecode):
         code = 0x5a
@@ -842,7 +843,7 @@ class bytecodes(metaclass=gather_bytecodes):
     class setglobalslot(Bytecode):
         code = 0x6f
         format = (
-            ('slotindex', Slot, None, io.u30),
+            ('slotindex', int, None, io.u30),
             )
         stack_before = ('value',)
 
@@ -858,7 +859,7 @@ class bytecodes(metaclass=gather_bytecodes):
     class setslot(Bytecode):
         code = 0x6d
         format = (
-            ('slotindex', Slot, None, io.u30),
+            ('slotindex', int, None, io.u30),
             )
         stack_before = ('obj', 'value')
 

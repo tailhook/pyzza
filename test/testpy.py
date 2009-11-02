@@ -50,12 +50,46 @@ class Test:
         else:
             self.reporter.ok()
 
+class Data(Test):
+    def __init__(self, reporter, name):
+        super().__init__(reporter, name)
+
+    def test(self):
+        self.testMakeList()
+        self.testMakeDict()
+
+    def testMakeList(self):
+        a = [1, 2]
+        self.assertEquals(a[0], 1)
+        self.assertEquals(a[1], 2)
+        self.assertEquals(a.length, 2)
+        a = [True, False, 2.0]
+        self.assertEquals(a[0], True)
+        self.assertEquals(a[1], False)
+        self.assertEquals(a[2], 2.0)
+        self.assertEquals(a.length, 3)
+
+    def testMakeDict(self):
+        b = {'ab': 1, 'cd': 2}
+        self.assertEquals(b['ab'], 1)
+        self.assertEquals(b['cd'], 2)
+        a = 'test'
+        b = {a+'ab': 10/2, a+'cd': 6*3, 'str': 'test'}
+        self.assertEquals(b['testab'], 5)
+        self.assertEquals(b['testcd'], 18)
+        self.assertEquals(b['str'], 'test')
+        c = {}
+        self.assertEquals(c['test'], undefined)
+        c['test'] = 2
+        self.assertEquals(c['test'], 2)
+
 class TestMath(Test):
     def __init__(self, reporter, name):
         super().__init__(reporter, name)
 
     def test(self):
         self.operators()
+        self.boolean()
         self.precedence()
         self.augmented_assign()
 
@@ -64,6 +98,65 @@ class TestMath(Test):
         self.assertEquals(2+3, 5)
         self.assertEquals(6/3, 2)
         self.assertEquals(7-3, 4)
+        self.assertFalse(3 > 5)
+        self.assertTrue(3 > 1)
+        self.assertFalse(3 > 3)
+        self.assertTrue(999.3 > 999.0)
+        self.assertTrue(2*2*2 < 3*3)
+        self.assertTrue(11111111.0 < 22222222.0)
+        self.assertFalse(311111111.0 < 22222222.0)
+        self.assertTrue(1 <= 2)
+        self.assertTrue(2 <= 2)
+        self.assertFalse(2 <= 1)
+        self.assertTrue(3 >= 2)
+        self.assertTrue(2 >= 2)
+        self.assertFalse(1 >= 2)
+
+    def _reset(self):
+        self.history = []
+
+    def _true(self):
+        self.history.push(True)
+        return True
+
+    def _false(self):
+        self.history.push(False)
+        return False
+
+    def boolean(self):
+        self.assertTrue(True and True)
+        self.assertFalse(True and False)
+        self.assertFalse(False and True)
+        self.assertFalse(False and False)
+        self.assertTrue(True or False)
+        self.assertTrue(False or True)
+        self.assertTrue(True or True)
+        self.assertFalse(False or False)
+        #testing short circuit
+        self._reset()
+        self.assertTrue(self._true() and self._true())
+        self.assertEquals(self.history.length, 2)
+        self._reset()
+        self.assertFalse(self._true() and self._false())
+        self.assertEquals(self.history.length, 2)
+        self._reset()
+        self.assertFalse(self._false() and self._true())
+        self.assertEquals(self.history.length, 1)
+        self._reset()
+        self.assertFalse(self._false() and self._false())
+        self.assertEquals(self.history.length, 1)
+        self._reset()
+        self.assertTrue(self._true() or self._false())
+        self.assertEquals(self.history.length, 1)
+        self._reset()
+        self.assertTrue(self._false() or self._true())
+        self.assertEquals(self.history.length, 2)
+        self._reset()
+        self.assertTrue(self._true() or self._true())
+        self.assertEquals(self.history.length, 1)
+        self._reset()
+        self.assertFalse(self._false() or self._false())
+        self.assertEquals(self.history.length, 2)
 
     def precedence(self):
         self.assertEquals(2*3+4, 10)
@@ -102,6 +195,11 @@ class Loops(Test):
         self.testRange1()
         self.testRange2()
         self.testRange3()
+        self.testRange4()
+        self.testRange5()
+        self.testRange6()
+        self.testWhile()
+        self.testObjectIter()
 
     def testRange1(self):
         j = 1.1
@@ -138,6 +236,93 @@ class Loops(Test):
         else:
             j = 1
         self.assertEquals(j, 1)
+
+    def testRange6(self):
+        j = 0
+        for i in range(1, 10):
+            i += 5
+            j += 1
+        self.assertEquals(j, 9)
+        j = 0
+        for i in range(1, 10, 2):
+            j += 1
+        self.assertEquals(j, 5)
+        j = 0
+        a = 1
+        b = 10
+        c = 2
+        for i in range(a, b, c):
+            j += 1
+        self.assertEquals(j, 5)
+        j = 0
+        for i in range(11, 1, -2):
+            j += 1
+        self.assertEquals(j, 5)
+        j = 0
+        a = 11
+        b = 1
+        c = -2
+        for i in range(a, b, c):
+            j += 1
+        self.assertEquals(j, 5)
+
+    def testWhile(self):
+        i = 2
+        j = 0
+        while i < 21:
+            i += 2
+            j += 1
+        self.assertEquals(i , 22)
+        self.assertEquals(j, 10)
+        while i < 32:
+            i += 2
+            j += 1
+            if j > 25:
+                break
+        else:
+            i = 100
+        self.assertEquals(i , 100)
+        self.assertEquals(j, 15)
+        while i < 125:
+            i += 2
+            j += 1
+            if j > 25:
+                break
+        else:
+            i = 201
+        self.assertEquals(i, 122)
+        self.assertEquals(j, 26)
+
+    def testObjectIter(self):
+        ob = {
+            'key_a': 'aa',
+            'key_b': 'bb',
+            'key_c': 'cc',
+            }
+        j = 0
+        for k in keys(ob):
+            j += 1
+            self.assertEquals(k.substr(0, 4), 'key_')
+            self.assertTrue('abc'.indexOf(k.charAt(4)) >= 0)
+            self.assertTrue(k.length == 5)
+        self.assertEquals(j, 3)
+        #~ j = 0
+        #~ for v in values(ob):
+            #~ j += 1
+            #~ self.assertTrue('abc'.indexOf(v.charAt(0)) >= 0)
+            #~ self.assertTrue(v.charAt(0) == v.charAt(1))
+            #~ self.assertTrue(v.length == 2)
+        #~ self.assertEquals(j, 3)
+        #~ j = 0
+        #~ for k, v in items(ob):
+            #~ j += 1
+            #~ self.assertEquals(k.substr(0, 4), 'key_')
+            #~ self.assertTrue('abc'.indexOf(k.charAt(4)) >= 0)
+            #~ self.assertTrue(k.length == 5)
+            #~ self.assertTrue('abc'.indexOf(v.charAt(0)) >= 0)
+            #~ self.assertTrue(v.charAt(0) == v.charAt(1))
+            #~ self.assertTrue(v.length == 2)
+        #~ self.assertEquals(j, 3)
 
 class Exceptions(Test):
     def __init__(self, reporter, name):
@@ -254,6 +439,69 @@ class TestClass(Test):
         self.assertEquals(a.hello(), 'Hello!')
         self.assertEquals(a.world(), 'Hello! baby bear')
 
+class Functions(Test):
+    def __init__(self, reporter, name):
+        super().__init__(reporter, name)
+
+    def test(self):
+        self.testFunction()
+        self.testClosure()
+
+    def testFunction(self):
+        def test():
+            return 'test'
+        self.assertEquals(test(), 'test')
+        def hello(name):
+            return "Hello " + name
+        self.assertEquals(hello("world"), 'Hello world')
+
+    def testClosure(self):
+        a = 13
+        b = 17
+        def mply(c):
+            return a*b*c
+        self.assertEquals(mply(3), 13*17*3)
+        b = 11
+        self.assertEquals(mply(2), 13*11*2)
+        def deep():
+            def moredeep():
+                return b
+            return moredeep
+        f = deep()
+        self.assertEquals(f(), 11)
+        def deep():
+            b = 13
+            def moredeep():
+                return b
+            return moredeep
+        f = deep()
+        self.assertEquals(f(), 13)
+        self.assertEquals(deep()(), 13)
+        def deep(b):
+            def moredeep():
+                return b
+            return moredeep
+        f = deep(88)
+        self.assertEquals(f(), 88)
+        self.assertEquals(deep(77)(), 77)
+        for i in range(10):
+            def hello():
+                return i*2
+            self.assertEquals(hello(), 2*i)
+        try:
+            hello(1)
+        except ArgumentError as e:
+            self.assertTrue(e.getStackTrace().indexOf('testpy.py') >= 0)
+            def test():
+                return e.getStackTrace()
+            self.assertTrue(test().indexOf('testpy.py') >= 0)
+        try:
+            test()
+        except TypeError:
+            pass
+        else:
+            raise Failure("Exception was not cleared")
+
 class Reporter:
     def __init__(self, textlabel):
         self.textlabel = textlabel
@@ -277,6 +525,7 @@ class Reporter:
     def fail(self, failure):
         if not self.at_start:
             self.textlabel.appendText('... ')
+        self.debug(failure.getStackTrace())
         self.textlabel.appendText('Fail: '+failure.message+'\n')
         self.failed += 1
 
@@ -323,8 +572,10 @@ class Main(Sprite):
 
     def start_tests(self, event):
         self.removeEventListener(Event.ENTER_FRAME, self.start_tests)
+        Data(self.reporter, 'Data').run()
         TestMath(self.reporter, 'Math').run()
         Loops(self.reporter, 'Loops').run()
         Exceptions(self.reporter, 'Exceptions').run()
         TestClass(self.reporter, 'Classes').run()
+        Functions(self.reporter, 'Functions').run()
         self.reporter.finish()

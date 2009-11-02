@@ -8,7 +8,6 @@ from .io import DummyABCStream, ABCStream, uint
 
 class Offset(int): pass
 class Register(int): pass
-class Slot(int): pass
 
 class Undefined(object):
     def __new__(cls):
@@ -122,7 +121,7 @@ CONSTANT_StaticProtectedNs  = 0x1A
 CONSTANT_PrivateNs          = 0x05
 class NamespaceInfo(ABCStruct):
 
-    def __init__(self, name):
+    def __init__(self, name=''):
         self.name = name
 
     @classmethod
@@ -176,6 +175,9 @@ namespace_kinds = {
     }
 
 class NamespaceSetInfo(ABCStruct):
+
+    def __init__(self, *namespaces):
+        self.ns = namespaces
 
     @classmethod
     def read(cls, stream, index):
@@ -284,6 +286,11 @@ class OptionDetail(ABCStruct):
         return '<{} {!r}>'.format(self.__class__.__name__, self.value)
 
 class TraitSlot(ABCStruct):
+    kind = 0
+
+    def __init__(self, slot_id=0, type_name=AnyType()):
+        self.slot_id = slot_id
+        self.type_name = type_name
 
     @classmethod
     def read(cls, stream, index):
@@ -575,7 +582,8 @@ class QName(MultinameInfo):
         stream.write_u30(index.get_string_index(self.name))
 
     def __eq__(self, other):
-        return self.name == other.name and self.namespace == other.namespace
+        return self.kind == other.kind \
+            and self.name == other.name and self.namespace == other.namespace
 
     def __hash__(self):
         return hash((self.name, self.namespace))
@@ -625,18 +633,24 @@ class Multiname(MultinameInfo):
         stream.write_u30(index.get_string_index(self.name))
 class MultinameA(Multiname):
     kind = CONSTANT_MultinameA
+
 class MultinameL(MultinameInfo):
     kind = CONSTANT_MultinameL
+
+    def __init__(self, namespace_set):
+        self.namespace_set = namespace_set
+
     @classmethod
     def _read(cls, stream, index):
-        self = cls()
-        self.namespace_set = index.get_namespace_set(stream.read_u30())
-        return self
+        return cls(index.get_namespace_set(stream.read_u30()))
+
     def __repr__(self):
         return '<{} {}>'.format(self.__class__.__name__, self.namespace_set)
+
     def write(self, stream, index):
         stream.write_u8(self.kind)
         stream.write_u30(index.get_namespace_set_index(self.namespace_set))
+
 class MultinameLA(Multiname):
     kind = CONSTANT_MultinameLA
 

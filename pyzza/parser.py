@@ -32,7 +32,12 @@ class Node(object):
             return '{}(...)'.format(self.__class__.__name__)
         else:
             with p.group(4, self.__class__.__name__+'(', ')'):
-                for (idx, ch) in enumerate(self.children):
+                try:
+                    ch = iter(self.children)
+                except AttributeError:
+                    p.text(repr(self))
+                    return
+                for (idx, ch) in enumerate(ch):
                     if idx:
                         p.text(',')
                         p.breakable()
@@ -42,7 +47,7 @@ class GenericNode(Node):
     """Some dummy to have untyped parse tree for printing.
     Useful for debugging only
     """
-    __slots__ = ('children', '__dict__')
+    __slots__ = ('children',)
     def __init__(self, children, context):
         self.children = children
         super().__init__(context)
@@ -196,6 +201,23 @@ class For(Node):
         if self.else_:
             yield self.else_
 
+class While(Node):
+    __slots__ = ('condition', 'body', 'else_')
+    def __init__(self, children, context):
+        _while, self.condition, self.body = children[:3]
+        self.else_ = None
+        assert _while.value == 'while', _while
+        if len(children) > 3:
+            _else, self.else_ = children[3:]
+            assert _else.value == 'else', _else
+        super().__init__(context)
+    @property
+    def children(self):
+        yield self.condition
+        yield self.body
+        if self.else_:
+            yield self.else_
+
 class Try(Node):
     __slots__ = ('body', 'excepts', 'except_', 'else_', 'finally_')
     def __init__(self, children, context):
@@ -243,11 +265,17 @@ class Try(Node):
         super().__init__(context)
     @property
     def children(self):
-        yield self.var
-        yield self.expr
         yield self.body
+        for i in self.excepts:
+            for k in i:
+                if k is not None:
+                    yield k
+        if self.except_:
+            yield self.except_
         if self.else_:
             yield self.else_
+        if self.finally_:
+            yield self.finally_
 
 class Assign(Node):
     __slots__ = ('target', 'operator', 'expr')
@@ -271,7 +299,7 @@ class Decorator(Node):
         yield self.arguments
 
 class Class(Node):
-    __slots__ = ('decorators', 'name', 'bases', 'body')
+    __slots__ = ('decorators', 'name', 'bases', 'body', '__dict__')
     def __init__(self, children, context):
         self.decorators = None
         if len(children) < 4:
@@ -283,13 +311,14 @@ class Class(Node):
         super().__init__(context)
     @property
     def children(self):
-        yield self.decorators
+        if self.decorators:
+            yield self.decorators
         yield self.name
         yield self.bases
         yield self.body
 
 class Func(Node):
-    __slots__ = ('decorators', 'name', 'arguments', 'body')
+    __slots__ = ('decorators', 'name', 'arguments', 'body', '__dict__')
     def __init__(self, children, context):
         self.decorators = None
         _def, self.name, self.arguments, self.body = children
@@ -297,7 +326,8 @@ class Func(Node):
         super().__init__(context)
     @property
     def children(self):
-        yield self.decorators
+        if self.decorators:
+            yield self.decorators
         yield self.name
         yield self.arguments
         yield self.body
@@ -305,8 +335,41 @@ class Func(Node):
 class Tuple(GenericNode):
     __slots__ = ()
 
+class ListMaker(GenericNode):
+    __slots__ = ()
+
+def _ListMaker(children, context):
+    if children:
+        assert len(children) == 1, children
+        assert isinstance(children[0], ListMaker)
+        return children[0]
+    else:
+        return ListMaker([], context)
+
+class DictMaker(GenericNode):
+    __slots__ = ()
+
+def _DictMaker(children, context):
+    if children:
+        assert len(children) == 1, children
+        assert isinstance(children[0], DictMaker)
+        return children[0]
+    else:
+        return DictMaker([], context)
+
+class Parameters(GenericNode):
+    __slots__ = ()
+
+def _Parameters(children, context):
+    if children:
+        assert len(children) == 1, children
+        assert isinstance(children[0], Parameters)
+        return children[0]
+    else:
+        return Parameters([], context)
+
 class FileInput(GenericNode):
-    __slots__ = ('used_names',)
+    pass
 
 def Nop(val, ctx):
     return
@@ -327,7 +390,7 @@ def _Tuple(child, ctx):
         return child[0]
 
 def Skip(child, ctx):
-    assert len(child) == 1, child
+    assert len(child) == 1, (child, ctx)
     return child[0]
 
 def Atom(child, ctx):
@@ -370,6 +433,9 @@ class NotTest(Node):
         _not, self.expr = children
         assert _not.value == 'not', _not
         super().__init__(context)
+    @property
+    def children(self):
+        return self.expr
 
 def _NotTest(child, ctx):
     if len(child) < 2:
@@ -545,6 +611,10 @@ tokens = {
     token.STRING: String,
     token.DEDENT: Nop,
     token.ENDMARKER: Nop,
+    token.LSQB: Nop,
+    token.RSQB: Nop,
+    token.LBRACE: Nop,
+    token.RBRACE: Nop,
     token.PLUS: Op,
     token.MINUS: Op,
     token.STAR: Op,
@@ -591,8 +661,8 @@ symbols = {
     symbol.argument: Skip,
     symbol.pass_stmt: Skip,
     symbol.arglist: List,
-    symbol.typedargslist: List,
-    symbol.parameters: Skip,
+    symbol.typedargslist: Parameters,
+    symbol.parameters: _Parameters,
     symbol.compound_stmt: Skip,
     symbol.suite: List,
     symbol.decorator: Decorator,
@@ -603,6 +673,8 @@ symbols = {
     symbol.comp_op: Term,
     symbol.trailattr: GetAttr,
     symbol.trailsubscr: Subscr,
+    symbol.subscript: Skip,
+    symbol.subscriptlist: Skip,
     symbol.trailcall: Call,
     symbol.trailered: Trailered,
     symbol.testlist: _Tuple,
@@ -613,12 +685,17 @@ symbols = {
     symbol.flow_stmt: Skip,
     symbol.if_stmt: If,
     symbol.for_stmt: For,
+    symbol.while_stmt: While,
     symbol.try_stmt: Try,
     symbol.break_stmt: Break,
     symbol.except_clause: Tuple,
     symbol.decorated: Decorated,
     symbol.return_stmt: Return,
     symbol.raise_stmt: Raise,
+    symbol.listmaker_in: ListMaker,
+    symbol.listmaker: _ListMaker,
+    symbol.dictmaker_in: DictMaker,
+    symbol.dictmaker: _DictMaker,
     symbol.testlist_gexp: GenExp,
     symbol.file_input: FileInput,
     }

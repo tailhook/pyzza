@@ -1,19 +1,19 @@
 Implement try...finally
 Implement compilation of all node types (arithmetics, etc.)
-Implement subscription (square brackets)
-Implement while loop
 Implement loop primitives (range, keys, values, items, zip, enumerate)
-For and except create new variables. Fix, so that they can reuse variables
 Fill global namespace
 Make syntax error reporting even better
-Allow other functions
-Implement function closures
+Implement functions in global(package) namespace
 Allow other files
 Mandatory optimizations:
     * remove zero jumps
     * "getlocal 1" -> "getlocal_1"
-Optional optimisations:
+    * returnvoid just after returnvalue
+Optional optimizations:
     * optimize constant arithmetics (easy)
     * reuse variables (hard)
     * merging several DoABC tags (moderate, but tedious)
-    * ifs with single comparison optimize to specialized jump
+    * ifs with single comparison optimize to specialized jump (moderate)
+    * setlocal, getlocal -> dup, setlocal (easy)
+    * sort activation slots according to usage frequency (easy)
+    * derive variable types, optimize method dispatch and int arithmetic (hard)
