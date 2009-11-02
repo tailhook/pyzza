@@ -1,6 +1,7 @@
 from itertools import chain, count
 from operator import methodcaller, attrgetter
 from collections import Counter
+from contextlib import contextmanager
 
 from . import parser, library, swf, bytecode, abc, tags
 
@@ -554,63 +555,83 @@ class CodeFragment:
             self.bytecodes.append(bytecode.coerce_a())
             self.bytecodes.append(bytecode.setlocal(reg))
 
-    def visit_assign(self, node, void):
-        assert void == True
-        if isinstance(node.target, parser.Name):
-            reg = self.namespace[node.target.value]
+    @contextmanager
+    def assign(self, target, _swap=False):
+        if isinstance(target, parser.Name):
+            reg = self.namespace[target.value]
             if isinstance(reg, ClosureSlot):
                 self.bytecodes.append(bytecode.getlocal(self.activation))
-            if node.operator.value != '=':
+                if _swap:
+                    self.bytecodes.append(bytecode.swap())
+        elif isinstance(target, parser.GetAttr):
+            self.push_value(target.expr)
+            if _swap:
+                self.bytecodes.append(bytecode.swap())
+        elif isinstance(target, parser.Subscr):
+            self.push_value(target.expr)
+            self.push_value(target.index)
+            if _swap:
+                raise NotImplementedError(target)
+        else:
+            raise NotImplementedError(target)
+        try:
+            yield
+        finally:
+            if isinstance(target, parser.Name):
+                self.bytecodes.append(bytecode.coerce_a())
                 if isinstance(reg, Register):
-                    self.bytecodes.append(bytecode.getlocal(reg))
+                    self.bytecodes.append(bytecode.setlocal(reg))
                 elif isinstance(reg, ClosureSlot):
-                    self.bytecodes.append(bytecode.dup())
-                    self.bytecodes.append(bytecode.getslot(reg.index))
+                    self.bytecodes.append(bytecode.setslot(reg.index))
                 else:
                     raise NotImplementedError(reg)
-        elif isinstance(node.target, parser.GetAttr):
-            self.push_value(node.target.expr)
-            if node.operator.value != '=':
-                self.bytecodes.append(bytecode.dup())
-                self.bytecodes.append(bytecode.getproperty(
-                    self.qname(node.target.name.value)))
-        elif isinstance(node.target, parser.Subscr):
-            self.push_value(node.target.expr)
-            self.push_value(node.target.index)
-            assert node.operator.value == '='
-        else:
-            raise NotImplementedError(node.target)
-        self.push_value(node.expr)
-        if node.operator.value == '=':
-            pass
-        elif node.operator.value == '+=':
-            self.bytecodes.append(bytecode.add())
-        elif node.operator.value == '-=':
-            self.bytecodes.append(bytecode.subtract())
-        elif node.operator.value == '*=':
-            self.bytecodes.append(bytecode.multiply())
-        elif node.operator.value == '/=':
-            self.bytecodes.append(bytecode.divide())
-        elif node.operator.value == '%=':
-            self.bytecodes.append(bytecode.modulo())
-        else:
-            raise NotImplementedError(node.operator)
-        if isinstance(node.target, parser.Name):
-            self.bytecodes.append(bytecode.coerce_a())
-            if isinstance(reg, Register):
-                self.bytecodes.append(bytecode.setlocal(reg))
-            elif isinstance(reg, ClosureSlot):
-                self.bytecodes.append(bytecode.setslot(reg.index))
+            elif isinstance(target, parser.GetAttr):
+                self.bytecodes.append(bytecode.setproperty(
+                    self.qname(target.name.value)))
+            elif isinstance(target, parser.Subscr):
+                self.bytecodes.append(bytecode.setproperty(
+                    abc.MultinameL(abc.NamespaceSetInfo(abc.NSPackage('')))))
             else:
-                raise NotImplementedError(reg)
-        elif isinstance(node.target, parser.GetAttr):
-            self.bytecodes.append(bytecode.setproperty(
-                self.qname(node.target.name.value)))
-        elif isinstance(node.target, parser.Subscr):
-            self.bytecodes.append(bytecode.setproperty(
-                abc.MultinameL(abc.NamespaceSetInfo(abc.NSPackage('')))))
-        else:
-            raise NotImplementedError(node.target)
+                raise NotImplementedError(target)
+
+    def do_assign(self, target):
+        with self.assign(target, _swap=True):
+            pass
+
+    def visit_assign(self, node, void):
+        assert void == True
+        with self.assign(node.target):
+            if node.operator.value != '=':
+                if isinstance(node.target, parser.Name):
+                    reg = self.namespace[node.target.value]
+                    if isinstance(reg, Register):
+                        self.bytecodes.append(bytecode.getlocal(reg))
+                    elif isinstance(reg, ClosureSlot):
+                        self.bytecodes.append(bytecode.dup())
+                        self.bytecodes.append(bytecode.getslot(reg.index))
+                    else:
+                        raise NotImplementedError(reg)
+                elif isinstance(node.target, parser.GetAttr):
+                    self.bytecodes.append(bytecode.dup())
+                    self.bytecodes.append(bytecode.getproperty(
+                        self.qname(node.target.name.value)))
+                else:
+                    raise NotImplementedError(node.target)
+            self.push_value(node.expr)
+            if node.operator.value == '=':
+                pass
+            elif node.operator.value == '+=':
+                self.bytecodes.append(bytecode.add())
+            elif node.operator.value == '-=':
+                self.bytecodes.append(bytecode.subtract())
+            elif node.operator.value == '*=':
+                self.bytecodes.append(bytecode.multiply())
+            elif node.operator.value == '/=':
+                self.bytecodes.append(bytecode.divide())
+            elif node.operator.value == '%=':
+                self.bytecodes.append(bytecode.modulo())
+            else:
+                raise NotImplementedError(node.operator)
 
     def visit_call(self, node, void):
         name = node.expr
@@ -801,7 +822,6 @@ class CodeFragment:
                         else:
                             step = 1
                     assert len(node.var) == 1, node.var
-                    val = self.namespace[node.var[0].value]
                     stepreg = Register()
                     iterreg = Register()
                     stopreg = Register()
@@ -820,17 +840,8 @@ class CodeFragment:
                         self.bytecodes.append(bytecode.setlocal(stepreg))
                     self.bytecodes.append(bytecode.jump(condlab))
                     self.bytecodes.append(bodylab)
-                    if isinstance(val, ClosureSlot):
-                        self.bytecodes.append(bytecode.getlocal(
-                            self.activation))
-                    self.bytecodes.append(bytecode.getlocal(iterreg))
-                    if isinstance(val, Register):
-                        self.bytecodes.append(bytecode.coerce_a())
-                        self.bytecodes.append(bytecode.setlocal(val))
-                    elif isinstance(val, ClosureSlot):
-                        self.bytecodes.append(bytecode.setslot(val.index))
-                    else:
-                        raise NotImplementedError(val)
+                    with self.assign(node.var[0]):
+                        self.bytecodes.append(bytecode.getlocal(iterreg))
                     self.loopstack.append((contlab, endlabel))
                     self.exec_suite(node.body)
                     self.loopstack.pop()
@@ -881,19 +892,26 @@ class CodeFragment:
                     self.bytecodes.append(bodylabel)
                     if val.name == 'keys':
                         assert len(node.var) == 1
-                        var = self.namespace[node.var[0].value]
-                        if isinstance(var, ClosureSlot):
-                            self.bytecodes.append(bytecode.getlocal(
-                                self.activation))
-                        self.bytecodes.append(bytecode.getlocal(obj))
-                        self.bytecodes.append(bytecode.getlocal(idx))
-                        self.bytecodes.append(bytecode.nextname())
-                        if isinstance(var, ClosureSlot):
-                            self.bytecodes.append(bytecode.setslot(var.index))
-                        elif isinstance(var, Register):
-                            self.bytecodes.append(bytecode.setlocal(var))
-                        else:
-                            raise NotImplementedError(var)
+                        with self.assign(node.var[0]):
+                            self.bytecodes.append(bytecode.getlocal(obj))
+                            self.bytecodes.append(bytecode.getlocal(idx))
+                            self.bytecodes.append(bytecode.nextname())
+                    elif val.name == 'values':
+                        assert len(node.var) == 1
+                        with self.assign(node.var[0]):
+                            self.bytecodes.append(bytecode.getlocal(obj))
+                            self.bytecodes.append(bytecode.getlocal(idx))
+                            self.bytecodes.append(bytecode.nextvalue())
+                    elif val.name == 'items':
+                        assert len(node.var) == 2
+                        with self.assign(node.var[0]):
+                            self.bytecodes.append(bytecode.getlocal(obj))
+                            self.bytecodes.append(bytecode.getlocal(idx))
+                            self.bytecodes.append(bytecode.nextname())
+                        with self.assign(node.var[1]):
+                            self.bytecodes.append(bytecode.getlocal(obj))
+                            self.bytecodes.append(bytecode.getlocal(idx))
+                            self.bytecodes.append(bytecode.nextvalue())
                     self.loopstack.append((contlabel, endlabel))
                     self.exec_suite(node.body)
                     self.loopstack.pop()
@@ -946,12 +964,12 @@ class CodeFragment:
             excinfo.exc_from = startlabel
             excinfo.exc_to = endbodylabel
             excinfo.target = catchlabel
-            reg = None
+            variable = None
             if isinstance(exc, tuple):
                 excinfo.exc_type = self.find_name(exc[0].value).cls.name
                 if exc[1] is not None:
                     excinfo.var_name = self.qname(exc[1].value)
-                    reg = self.namespace[exc[1].value]
+                    variable = exc[1]
                 else:
                     excinfo.var_name = None
                 excbody = exc[2]
@@ -968,27 +986,12 @@ class CodeFragment:
                 self.bytecodes.append(bytecode.pushscope())
             self.bytecodes.append(bytecode.newcatch(excinfo))
             self.bytecodes.append(bytecode.pop())
-            if reg is None:
+            if variable is None:
                 self.bytecodes.append(bytecode.pop())
-            elif isinstance(reg, Register):
-                self.bytecodes.append(bytecode.setlocal(reg))
-            elif isinstance(reg, ClosureSlot):
-                self.bytecodes.append(bytecode.getlocal(self.activation))
-                self.bytecodes.append(bytecode.swap())
-                self.bytecodes.append(bytecode.setslot(reg.index))
             else:
-                raise NotImplementedError(reg)
+                self.do_assign(variable)
             self.exec_suite(excbody)
-            if reg is None:
-                pass
-            elif isinstance(reg, Register):
-                self.bytecodes.append(bytecode.kill(reg))
-            elif isinstance(reg, ClosureSlot):
-                self.bytecodes.append(bytecode.getlocal(self.activation))
-                self.bytecodes.append(bytecode.pushundefined())
-                self.bytecodes.append(bytecode.setslot(reg.index))
-            else:
-                raise NotImplementedError(reg)
+            # TODO: kill variable
             self.bytecodes.append(bytecode.jump(endlabel))
         self.bytecodes.append(elselabel)
         if node.else_:

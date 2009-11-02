@@ -1,6 +1,6 @@
 Implement try...finally
 Implement compilation of all node types (arithmetics, etc.)
-Implement loop primitives (range, keys, values, items, zip, enumerate)
+Implement loop primitives (zip, enumerate)
 Fill global namespace
 Make syntax error reporting even better
 Implement functions in global(package) namespace

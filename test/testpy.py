@@ -306,23 +306,24 @@ class Loops(Test):
             self.assertTrue('abc'.indexOf(k.charAt(4)) >= 0)
             self.assertTrue(k.length == 5)
         self.assertEquals(j, 3)
-        #~ j = 0
-        #~ for v in values(ob):
-            #~ j += 1
-            #~ self.assertTrue('abc'.indexOf(v.charAt(0)) >= 0)
-            #~ self.assertTrue(v.charAt(0) == v.charAt(1))
-            #~ self.assertTrue(v.length == 2)
-        #~ self.assertEquals(j, 3)
-        #~ j = 0
-        #~ for k, v in items(ob):
-            #~ j += 1
-            #~ self.assertEquals(k.substr(0, 4), 'key_')
-            #~ self.assertTrue('abc'.indexOf(k.charAt(4)) >= 0)
-            #~ self.assertTrue(k.length == 5)
-            #~ self.assertTrue('abc'.indexOf(v.charAt(0)) >= 0)
-            #~ self.assertTrue(v.charAt(0) == v.charAt(1))
-            #~ self.assertTrue(v.length == 2)
-        #~ self.assertEquals(j, 3)
+        j = 0
+        for v in values(ob):
+            j += 1
+            self.assertTrue('abc'.indexOf(v.charAt(0)) >= 0)
+            self.assertTrue(v.charAt(0) == v.charAt(1))
+            self.assertTrue(v.length == 2)
+        self.assertEquals(j, 3)
+        j = 0
+        for k, v in items(ob):
+            j += 1
+            self.assertEquals(k.substr(0, 4), 'key_')
+            self.assertTrue('abc'.indexOf(k.charAt(4)) >= 0)
+            self.assertTrue(k.length == 5)
+            self.assertTrue(k.charAt(4) == v.charAt(0))
+            self.assertTrue('abc'.indexOf(v.charAt(0)) >= 0)
+            self.assertTrue(v.charAt(0) == v.charAt(1))
+            self.assertTrue(v.length == 2)
+        self.assertEquals(j, 3)
 
 class Exceptions(Test):
     def __init__(self, reporter, name):
