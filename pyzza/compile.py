@@ -44,6 +44,8 @@ class CodeHeader:
         mi.flags = 0
         if hasattr(frag, 'activation'):
             mi.flags |= abc.MethodInfo.NEED_ACTIVATION
+        if frag.varargument:
+            mi.flags |= abc.MethodInfo.NEED_REST
         self.tag.real_body.method_info.append(mi)
         frag._method_info = mi
         mb = abc.MethodBodyInfo()
@@ -351,6 +353,7 @@ class CodeFragment:
             class_name=None,
             parent_namespaces=(Globals(),),
             arguments=(None,),
+            varargument=None,
             package_namespace='',
             filename=None,
             ):
@@ -379,9 +382,10 @@ class CodeFragment:
         self.class_name = class_name
         self.parent_namespaces = parent_namespaces
         self.arguments = arguments
+        self.varargument = varargument
         self.filename = filename
         self.current_line = None
-        for (i, v) in enumerate(arguments):
+        for (i, v) in enumerate(chain(arguments, (varargument,))):
             if v in ast.func_export:
                 self.bytecodes.append(bytecode.getlocal(
                     self.activation))
@@ -405,9 +409,12 @@ class CodeFragment:
                     if r.value is None:
                         rcount[r] += 1
         regs = {}
-        for (idx, (name, val)) in zip(count(len(self.arguments)), rcount.most_common()):
+        argnum = len(self.arguments)
+        if self.varargument:
+            argnum += 1
+        for (idx, (name, val)) in zip(count(argnum), rcount.most_common()):
             regs[name] = idx
-        self.local_count = len(self.arguments) + len(regs)
+        self.local_count = argnum + len(regs)
         for bcode in self.bytecodes:
             for (name, typ, _, _) in bcode.format:
                 if issubclass(typ, bytecode.Register):
@@ -536,11 +543,18 @@ class CodeFragment:
 
     def visit_function(self, node, void):
         assert void == True
+        args = node.arguments
+        if len(args) >= 2 and args[-2].value == '*':
+            vararg = args[-1].value
+            args = args[:-2]
+        else:
+            vararg = None
         if self.class_name is not None:
             frag = CodeFragment(node, self.library, self.code_header,
                 parent_namespaces=self.parent_namespaces,
                 private_namespace=self.private_namespace,
-                arguments=list(map(attrgetter('value'), node.arguments)),
+                arguments=list(map(attrgetter('value'), args)),
+                varargument=vararg,
                 filename=self.filename,
                 )
             self.namespace[node.name.value] = Method(frag)
@@ -552,7 +566,8 @@ class CodeFragment:
                 private_namespace=self.private_namespace,
                 parent_namespaces=(self,) + self.parent_namespaces,
                 arguments=[None] + list(
-                    map(attrgetter('value'), node.arguments)),
+                    map(attrgetter('value'), args)),
+                varargument=vararg,
                 filename=self.filename,
                 )
             reg = self.namespace[node.name.value]

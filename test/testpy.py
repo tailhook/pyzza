@@ -504,6 +504,7 @@ class Functions(Test):
     def test(self):
         self.testFunction()
         self.testClosure()
+        self.testVarArg()
 
     def testFunction(self):
         def test():
@@ -559,6 +560,33 @@ class Functions(Test):
             pass
         else:
             raise Failure("Exception was not cleared")
+
+    def varmeth1(self, *args):
+        return args
+
+    def varmeth2(self, a, b, *args):
+        self.assertEquals(a, b*b)
+        return args
+
+    def testVarArg(self):
+        self.assertEquals(self.varmeth1().length, 0)
+        ar = self.varmeth1(4, 6)
+        self.assertEquals(ar.length, 2)
+        self.assertEquals(ar[0]*ar[1], 24)
+        self.assertEquals(self.varmeth2(4, 2).length, 0)
+        ar = self.varmeth2(9, 3, 12, 2)
+        self.assertEquals(ar.length, 2)
+        self.assertEquals(ar[0]*ar[1], 24)
+        this = self
+        def prod(*args):
+            res = 1
+            for i in values(args):
+                res *= i
+            return res
+        self.assertEquals(prod(), 1)
+        self.assertEquals(prod(77), 77)
+        self.assertEquals(prod(2, 3, 4), 24)
+
 
 class Reporter:
     def __init__(self, textlabel):

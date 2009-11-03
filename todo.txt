@@ -1,7 +1,6 @@
 Implement try...finally
 Implement compilation of all node types (arithmetics, etc.)
 Implement loop primitives (zip, enumerate)
-Implement variable argument list
 Implement 'global' keyword
 Fill global namespace
 Make syntax error reporting even better
