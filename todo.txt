@@ -1,7 +1,8 @@
 Implement try...finally
 Implement compilation of all node types (arithmetics, etc.)
 Implement loop primitives (zip, enumerate)
-Implement 'global' keyword
+Implement 'global', 'nonlocal' keywords
+Implement class variables
 Fill global namespace
 Make syntax error reporting even better
 Implement functions in global(package) namespace

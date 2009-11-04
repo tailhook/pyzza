@@ -349,7 +349,6 @@ class CodeFragment:
     scope_stack_init = 0 # TODO: fix
     scope_stack_max = 10 # TODO: fix
     def __init__(self, ast, library, code_header,
-            private_namespace,
             class_name=None,
             parent_namespaces=(Globals(),),
             arguments=(None,),
@@ -377,7 +376,6 @@ class CodeFragment:
                 for (idx, k) in enumerate(ast.func_export))
         self.loopstack = [] # pairs of continue label and break label
         self.exceptions = []
-        self.private_namespace = private_namespace
         self.package_namespace = package_namespace
         self.class_name = class_name
         self.parent_namespaces = parent_namespaces
@@ -511,7 +509,6 @@ class CodeFragment:
                 else:
                     raise NotImplementedError("No decorator ``{}''".format(i.name))
         frag = CodeFragment(node, self.library, self.code_header,
-            private_namespace=self.private_namespace,
             parent_namespaces=(self,) + self.parent_namespaces,
             package_namespace=package,
             class_name=node.name.value,
@@ -552,7 +549,6 @@ class CodeFragment:
         if self.class_name is not None:
             frag = CodeFragment(node, self.library, self.code_header,
                 parent_namespaces=self.parent_namespaces,
-                private_namespace=self.private_namespace,
                 arguments=list(map(attrgetter('value'), args)),
                 varargument=vararg,
                 filename=self.filename,
@@ -563,20 +559,17 @@ class CodeFragment:
                 frag)
         else:
             frag = CodeFragment(node, self.library, self.code_header,
-                private_namespace=self.private_namespace,
                 parent_namespaces=(self,) + self.parent_namespaces,
                 arguments=[None] + list(
                     map(attrgetter('value'), args)),
                 varargument=vararg,
                 filename=self.filename,
                 )
-            reg = self.namespace[node.name.value]
             self.code_header.add_method_body('{}${:d}:{}'.format(self.filename,
                 node.lineno, node.name.value),
                 frag)
-            self.bytecodes.append(bytecode.newfunction(frag._method_info))
-            self.bytecodes.append(bytecode.coerce_a())
-            self.bytecodes.append(bytecode.setlocal(reg))
+            with self.assign(node.name):
+                self.bytecodes.append(bytecode.newfunction(frag._method_info))
 
     @contextmanager
     def assign(self, target, _swap=False):
@@ -680,16 +673,14 @@ class CodeFragment:
                     len(node.arguments)))
                 if void:
                     self.bytecodes.append(bytecode.pop())
-            elif isinstance(val, Register):
-                self.bytecodes.append(bytecode.getlocal(val))
+            else:
+                self.push_value(node.expr)
                 self.bytecodes.append(bytecode.pushnull())
                 for i in node.arguments:
                     self.push_value(i)
                 self.bytecodes.append(bytecode.call(len(node.arguments)))
                 if void:
                     self.bytecodes.append(bytecode.pop())
-            else:
-                raise NotImplementedError(val)
         else:
             self.push_value(node.expr)
             self.bytecodes.append(bytecode.pushnull())
@@ -1170,7 +1161,6 @@ def main():
     code_header = CodeHeader(args[0])
     NameCheck(ast) # fills closure variable names
     frag = CodeFragment(ast, lib, code_header,
-        private_namespace=args[0]+'$',
         filename=args[0],
         )
     code_header.add_method_body('', frag)

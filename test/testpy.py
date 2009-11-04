@@ -543,6 +543,9 @@ class Functions(Test):
         f = deep(88)
         self.assertEquals(f(), 88)
         self.assertEquals(deep(77)(), 77)
+        def localfun():
+            return deep(10)()
+        self.assertEquals(localfun(), 10)
         for i in range(10):
             def hello():
                 return i*2
