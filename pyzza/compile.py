@@ -65,14 +65,15 @@ class CodeHeader:
         mb.traits_info = traits
         mb.bytecode = frag.bytecodes
         self.tag.real_body.method_body_info.append(mb)
+        return mb
 
-    def add_class(self, name, bases, frag, package=''):
+    def add_class(self, name, bases, frag, package):
         cls = abc.ClassInfo()
         inst = abc.InstanceInfo()
         cls.instance_info = inst
         cls.cinit = frag._method_info
         cls.trait = []
-        inst.name = abc.QName(abc.NSPackage(package), name)
+        inst.name = abc.QName(package, name)
         inst.super_name = bases[0].name
         inst.flags = 0
         inst.interface = []
@@ -87,7 +88,7 @@ class CodeHeader:
                         flag = abc.TraitsInfo.ATTR_Override
                         break
                 traits.append(abc.TraitsInfo(
-                    abc.QName(abc.NSPackage(package), k),
+                    abc.QName(abc.NSPackage(''), k),
                     abc.TraitMethod(m.code_fragment._method_info),
                     attr=flag))
             elif isinstance(m, Register):
@@ -101,10 +102,15 @@ class CodeHeader:
     def add_main_script(self, frag):
         script = abc.ScriptInfo()
         script.init = frag._method_info
-        script.traits_info = [abc.TraitsInfo(val.class_info.instance_info.name,
-                abc.TraitClass(0, val.class_info))
-            for (name, val) in frag.namespace.items()
-            if isinstance(val, NewClass)]
+        trait = []
+        for (name, val) in frag.namespace.items():
+            if isinstance(val, NewClass):
+                trait.append(abc.TraitsInfo(val.class_info.name,
+                    abc.TraitClass(0, val.class_info.class_info)))
+            elif isinstance(val, NewFunction):
+                trait.append(abc.TraitsInfo(val.property_name,
+                    abc.TraitMethod(val.method_info)))
+        script.traits_info = trait
         self.tag.real_body.script_info.append(script)
         return script
 
@@ -115,28 +121,29 @@ class CodeHeader:
 class NameType:
     """Type of namespace bindings"""
 
-class Class(NameType):
-    """Imported class"""
-    def __init__(self, cls):
-        self.cls = cls
+class Property(NameType):
+    """Property of a global namespace"""
+    def __init__(self, name=None):
+        self.name = name
+
+    @property
+    def property_name(self):
+        return self.name
 
     def __repr__(self):
-        return '<Class {!r}>'.format(self.cls)
+        return '<{} {!r}>'.format(self.__class__.__name__, self.property_name)
 
-    @property
-    def property_name(self):
-        return self.cls.name
+class Class(Property):
+    """Imported class"""
+    def __init__(self, cls):
+        super().__init__(cls.name)
+        self.class_info = cls
 
-class NewClass(NameType):
+class NewClass(Property):
     """In-source class"""
-    def __init__(self, frag, clsinfo):
-        self.code_fragment = frag
-        self.class_info = clsinfo
-        self.cls = frag.library.add_class(clsinfo)
 
-    @property
-    def property_name(self):
-        return self.class_info.instance_info.name
+class NewFunction(Property):
+    """In-source class"""
 
 class Register(NameType):
     """Register reference, can have register number or can have no number"""
@@ -201,10 +208,13 @@ class NameCheck:
         parser.GetAttr: 'getattr',
         parser.CallAttr: 'callattr',
         parser.Super: 'super',
+        parser.ImportStmt: 'import',
         }
 
     def __init__(self, node):
         self.allnames = set()
+        self.imported = set()
+        self.exports = set()
         if hasattr(node, 'arguments'):
             self.localnames = set(map(attrgetter('value'), node.arguments))
         else:
@@ -216,12 +226,15 @@ class NameCheck:
         self.annotate(node)
 
     def annotate(self, node):
-        exvars = set()
+        exvars = set(self.exports)
+        glob = set()
         for f in self.functions:
             exvars.update(f.func_globals & self.localnames)
+            glob.update(f.func_globals - self.localnames)
         node.func_export = frozenset(exvars)
         node.func_locals = frozenset(self.localnames)
-        node.func_globals = frozenset(self.allnames - self.localnames)
+        node.func_globals = frozenset(glob | self.allnames - self.localnames)
+        node.func_imports = frozenset(self.imported)
         #~ print(getattr(node, 'name', None),
             #~ node.func_globals, node.func_locals, node.func_export)
 
@@ -232,6 +245,8 @@ class NameCheck:
 
     def visit_class(self, node):
         NameCheck(node)
+        self.localnames.add(node.name.value)
+        self.exports.add(node.name.value)
         self.functions.append(node)
 
     def visit_getattr(self, node):
@@ -255,6 +270,10 @@ class NameCheck:
                     self.localnames.add(n.value)
         for n in node:
             self.visit(n)
+
+    def visit_import(self, node):
+        for name in node.names:
+            self.imported.add(name.value)
 
     def visit_for(self, node):
         for v in node.var:
@@ -349,11 +368,10 @@ class CodeFragment:
     scope_stack_init = 0 # TODO: fix
     scope_stack_max = 10 # TODO: fix
     def __init__(self, ast, library, code_header,
-            class_name=None,
+            mode="global",
             parent_namespaces=(Globals(),),
             arguments=(None,),
             varargument=None,
-            package_namespace='',
             filename=None,
             ):
         self.library = library
@@ -364,20 +382,31 @@ class CodeFragment:
             bytecode.getlocal_0(),
             bytecode.pushscope(),
             ]
+        if mode == 'class_body':
+            self.class_name = ast.name
         self.namespace = {k: Register() for k in ast.func_locals
             if k not in ast.func_export}
+        for k in ast.func_imports:
+            self.namespace[k] = Property()
         if ast.func_export:
-            self.activation = Register()
-            self.bytecodes.append(bytecode.newactivation())
-            self.bytecodes.append(bytecode.dup())
-            self.bytecodes.append(bytecode.pushscope())
-            self.bytecodes.append(bytecode.setlocal(self.activation))
-            self.namespace.update((k, ClosureSlot(idx+1, k))
-                for (idx, k) in enumerate(ast.func_export))
+            if mode == 'global':
+                self.namespace.update((k, Property(
+                    abc.QName(abc.NSPrivate(filename), k)))
+                    for (idx, k) in enumerate(ast.func_export))
+            elif mode in ('method', 'function'):
+                self.activation = Register()
+                self.bytecodes.append(bytecode.newactivation())
+                self.bytecodes.append(bytecode.dup())
+                self.bytecodes.append(bytecode.pushscope())
+                self.bytecodes.append(bytecode.setlocal(self.activation))
+                self.namespace.update((k, ClosureSlot(idx+1, k))
+                    for (idx, k) in enumerate(ast.func_export))
+            else:
+                raise NotImplementedError(mode)
+
         self.loopstack = [] # pairs of continue label and break label
         self.exceptions = []
-        self.package_namespace = package_namespace
-        self.class_name = class_name
+        self.mode = mode
         self.parent_namespaces = parent_namespaces
         self.arguments = arguments
         self.varargument = varargument
@@ -483,7 +512,7 @@ class CodeFragment:
         return ns.namespace[name]
 
     def qname(self, name):
-        return abc.QName(abc.NSPackage(self.package_namespace), name)
+        return abc.QName(abc.NSPackage(''), name)
 
     def qintern(self, name):
         return abc.QName(abc.NSInternal(), name)
@@ -496,22 +525,27 @@ class CodeFragment:
             package = node.module.value
             name = name.value
             cls = self.library.get_class(package, name)
-            assert name not in self.namespace
-            self.namespace[name] = Class(cls)
+            prop = self.namespace[name]
+            assert isinstance(prop, Property)
+            prop.__class__ = Class
+            prop.class_info = cls
+            prop.name = cls.name
 
     def visit_class(self, node, void):
         assert void == True
-        package = ''
+        package = abc.NSPrivate(self.filename)
         if node.decorators:
             for i in node.decorators:
                 if i.name.value == 'package':
-                    package = i.arguments[0].value
+                    package = abc.NSPackage(i.arguments[0].value)
+                elif i.name.value == 'private':
+                    package = abc.NSPrivate(self.filename)
                 else:
-                    raise NotImplementedError("No decorator ``{}''".format(i.name))
+                    raise NotImplementedError("No decorator ``{}''"
+                        .format(i.name))
         frag = CodeFragment(node, self.library, self.code_header,
+            mode="class_body",
             parent_namespaces=(self,) + self.parent_namespaces,
-            package_namespace=package,
-            class_name=node.name.value,
             filename=self.filename,
             )
         self.code_header.add_method_body('', frag)
@@ -519,24 +553,27 @@ class CodeFragment:
         if not node.bases:
             val = self.library.get_class('', 'Object')
         else:
-            val = self.find_name(node.bases[0].value).cls
+            val = self.find_name(node.bases[0].value).class_info
         bases = []
         while val:
             bases.append(val)
             val = val.get_base()
         cls = self.code_header.add_class(node.name.value, bases, frag,
             package=package)
-        self.bytecodes.append(bytecode.getscopeobject(0))
-        for i in reversed(bases):
-            self.bytecodes.append(bytecode.getlex(i.name))
-            self.bytecodes.append(bytecode.pushscope())
-        self.bytecodes.append(bytecode.getlex(bases[0].name))
-        self.bytecodes.append(bytecode.newclass(cls))
-        for i in range(len(bases)):
-            self.bytecodes.append(bytecode.popscope())
-        self.bytecodes.append(bytecode.initproperty(
-            self.qname(node.name.value)))
-        self.namespace[node.name.value] = NewClass(frag, cls)
+        prop = self.namespace[node.name.value]
+        if isinstance(prop, Property):
+            prop.__class__ = NewClass
+            prop.name = abc.QName(package, prop.name.name)
+            prop.code = frag
+            prop.class_info = self.library.add_class(cls)
+        with self.assign(node.name):
+            for i in reversed(bases):
+                self.bytecodes.append(bytecode.getlex(i.name))
+                self.bytecodes.append(bytecode.pushscope())
+            self.bytecodes.append(bytecode.getlex(bases[0].name))
+            self.bytecodes.append(bytecode.newclass(cls))
+            for i in range(len(bases)):
+                self.bytecodes.append(bytecode.popscope())
 
     def visit_function(self, node, void):
         assert void == True
@@ -546,8 +583,13 @@ class CodeFragment:
             args = args[:-2]
         else:
             vararg = None
-        if self.class_name is not None:
+        if self.mode == 'class_body':
+            if node.decorators:
+                for i in node.decorators:
+                    raise NotImplementedError("No decorator ``{}''"
+                        .format(i.name))
             frag = CodeFragment(node, self.library, self.code_header,
+                mode="method",
                 parent_namespaces=self.parent_namespaces,
                 arguments=list(map(attrgetter('value'), args)),
                 varargument=vararg,
@@ -555,21 +597,42 @@ class CodeFragment:
                 )
             self.namespace[node.name.value] = Method(frag)
             self.code_header.add_method_body(
-                '{}/{}'.format(self.class_name, node.name.value),
+                '{}/{}'.format(self.class_name.value, node.name.value),
                 frag)
         else:
+            package = abc.NSPrivate(self.filename)
+            if node.decorators:
+                for i in node.decorators:
+                    if i.name.value == 'package':
+                        package = abc.NSPackage(i.arguments[0].value)
+                    elif i.name.value == 'private':
+                        package = abc.NSPrivate(self.filename)
+                    else:
+                        raise NotImplementedError("No decorator ``{}''"
+                            .format(i.name))
             frag = CodeFragment(node, self.library, self.code_header,
+                mode="function",
                 parent_namespaces=(self,) + self.parent_namespaces,
                 arguments=[None] + list(
                     map(attrgetter('value'), args)),
                 varargument=vararg,
                 filename=self.filename,
                 )
-            self.code_header.add_method_body('{}${:d}:{}'.format(self.filename,
+            mbody = self.code_header.add_method_body(
+                '{}${:d}:{}'.format(self.filename,
                 node.lineno, node.name.value),
                 frag)
-            with self.assign(node.name):
-                self.bytecodes.append(bytecode.newfunction(frag._method_info))
+            prop = self.namespace[node.name.value]
+            if isinstance(prop, Property):
+                prop.__class__ = NewFunction
+                prop.code = frag
+                prop.method_info = mbody.method
+                prop.name = abc.QName(package, prop.name.name)
+                # don't need to assign global functions
+                # they are like methods on global object
+            else:
+                with self.assign(node.name):
+                    self.bytecodes.append(bytecode.newfunction(mbody.method))
 
     @contextmanager
     def assign(self, target, _swap=False):
@@ -579,6 +642,8 @@ class CodeFragment:
                 self.bytecodes.append(bytecode.getlocal(self.activation))
                 if _swap:
                     self.bytecodes.append(bytecode.swap())
+            elif isinstance(reg, Property):
+                self.bytecodes.append(bytecode.getscopeobject(0))
         elif isinstance(target, parser.GetAttr):
             self.push_value(target.expr)
             if _swap:
@@ -602,6 +667,9 @@ class CodeFragment:
                     self.bytecodes.append(bytecode.setlocal(reg))
                 elif isinstance(reg, ClosureSlot):
                     self.bytecodes.append(bytecode.setslot(reg.index))
+                elif isinstance(reg, Property):
+                    self.bytecodes.append(bytecode.initproperty(
+                        reg.property_name))
                 else:
                     raise NotImplementedError(reg)
             elif isinstance(target, parser.GetAttr):
@@ -713,6 +781,12 @@ class CodeFragment:
                 self.bytecodes.append(bytecode.getslot(val.index))
             else:
                 self.bytecodes.append(bytecode.getlex(self.qintern(val.name)))
+        elif isinstance(val, Property):
+            if val.name in self.namespace:
+                self.bytecodes.append(bytecode.getscopeobject(0))
+                self.bytecodes.append(bytecode.getproperty(val.property_name))
+            else:
+                self.bytecodes.append(bytecode.getlex(val.property_name))
         elif isinstance(val, Class):
             self.bytecodes.append(bytecode.getlex(
                 val.cls.name))
@@ -992,7 +1066,7 @@ class CodeFragment:
             excinfo.target = catchlabel
             variable = None
             if isinstance(exc, tuple):
-                excinfo.exc_type = self.find_name(exc[0].value).cls.name
+                excinfo.exc_type = self.find_name(exc[0].value).class_info.name
                 if exc[1] is not None:
                     excinfo.var_name = self.qname(exc[1].value)
                     variable = exc[1]
@@ -1135,6 +1209,9 @@ def get_options():
         help="Do not add standart globals to a namespace (e.g. if you "
             "don't use library.swf from playerglobal.swc as a library)",
         dest="std_globals", default=True, action="store_false")
+    op.add_option('-m', '--main-class', metavar="CLASS",
+        help="Use CLASS as class for root movie clip (default Main)",
+        dest="main_class", default='Main', type="string")
     op.add_option('-o', '--output', metavar="SWFFILE",
         help="Output swf data into SWFFILE.",
         dest="output", default=None, type="string")
@@ -1170,7 +1247,7 @@ def main():
     content = [
         tags.FileAttributes(),
         code_tag,
-        tags.SymbolClass(main_class='Main'),
+        tags.SymbolClass(main_class=options.main_class),
         tags.ShowFrame(),
         ]
     if options.output:

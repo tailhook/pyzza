@@ -497,6 +497,9 @@ class TestClass(Test):
         self.assertEquals(a.hello(), 'Hello!')
         self.assertEquals(a.world(), 'Hello! baby bear')
 
+def global_fun(a, b):
+    return (a+b)*(a-b)
+
 class Functions(Test):
     def __init__(self, reporter, name):
         super().__init__(reporter, name)
@@ -513,6 +516,7 @@ class Functions(Test):
         def hello(name):
             return "Hello " + name
         self.assertEquals(hello("world"), 'Hello world')
+        self.assertEquals(global_fun(4, 3), 7)
 
     def testClosure(self):
         a = 13
@@ -589,7 +593,6 @@ class Functions(Test):
         self.assertEquals(prod(), 1)
         self.assertEquals(prod(77), 77)
         self.assertEquals(prod(2, 3, 4), 24)
-
 
 class Reporter:
     def __init__(self, textlabel):

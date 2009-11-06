@@ -291,7 +291,11 @@ class Assign(Node):
 class Decorator(Node):
     __slots__ = ('name', 'arguments')
     def __init__(self, children, context):
-        self.name, self.arguments = children
+        if len(children) > 1:
+            self.name, self.arguments = children
+        else:
+            self.name = children[0]
+            self.arguments = []
         super().__init__(context)
     @property
     def children(self):

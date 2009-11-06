@@ -589,7 +589,8 @@ class bytecodes(metaclass=gather_bytecodes):
         format = (
             ('property', MultinameInfo, 'multiname', io.u30),
             )
-        def _stack_before(self):
+        @property
+        def stack_before(self):
             return super()._stack_before() + ('value',)
 
     class instanceof(BinaryBytecode):
@@ -682,7 +683,7 @@ class bytecodes(metaclass=gather_bytecodes):
         format = (
             ('klass', ClassInfo, 'class', io.u30),
             )
-        stack_before = ('basescope', 'basetype')
+        stack_before = ('basetype',)
         stack_after = ('newclass',)
 
     class newfunction(Bytecode):

@@ -325,6 +325,7 @@ class TraitClass(ABCStruct):
     def __init__(self, slot_id=0, classi=None):
         self.slot_id = slot_id
         self.classi = classi
+        assert isinstance(classi, (type(None), ClassInfo))
 
     @classmethod
     def read(cls, stream, index):
@@ -336,15 +337,6 @@ class TraitClass(ABCStruct):
     def write(self, stream, index):
         stream.write_u30(self.slot_id)
         stream.write_u30(index.get_class_index(self.classi))
-
-class TraitFunction(ABCStruct):
-
-    @classmethod
-    def read(cls, stream, index):
-        self = cls()
-        self.slot_id = stream.read_u30()
-        self.function = index.get_method(stream.read_u30())
-        return self
 
 class TraitsInfo(ABCStruct):
     ATTR_Final = 0x01
@@ -415,6 +407,23 @@ class TraitMethod(ABCStruct):
     def write(self, stream, index):
         stream.write_u30(self.disp_id)
         stream.write_u30(index.get_method_index(self.method))
+
+class TraitFunction(ABCStruct):
+    kind = 5
+
+    def __init__(self, function, disp_id=0):
+        self.disp_id = disp_id
+        assert isinstance(function, MethodInfo), function
+        self.function = function
+
+    @classmethod
+    def read(cls, stream, index):
+        disp_id = stream.read_u30()
+        return cls(index.get_method(stream.read_u30()), disp_id=disp_id)
+
+    def write(self, stream, index):
+        stream.write_u30(self.disp_id)
+        stream.write_u30(index.get_method_index(self.function))
 
 class ScriptInfo(ABCStruct):
 
