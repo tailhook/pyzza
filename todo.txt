@@ -7,6 +7,7 @@ Implement 'del' statement
 Implement 'assert' statement (how?)
 Implement default argument values
 Implement generators
+Implement getters and setters (using decorators)
 Fill global namespace
 Make syntax error reporting even better
 Implement functions in global(package) namespace
@@ -23,3 +24,4 @@ Optional optimizations:
     * setlocal, getlocal -> dup, setlocal (easy)
     * sort activation slots according to usage frequency (easy)
     * derive variable types, optimize method dispatch and int arithmetic (hard)
+    * optimize attribute lookups (getproperty -> getslot) by analyzing class body
