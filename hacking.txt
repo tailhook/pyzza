@@ -1,8 +1,10 @@
 
- * swf.py - contains code to parse swf header
+Files description::
+
+ * swf.py - contains code to parse/assemble swf header
  * tags.py - tags of swffile (most are unimplemented and can only be skipped)
  * abc.py - ActionScript Bytecode (ABC) structures parser/assembler
  * bytecode.py - library of bytecodes, with utility to read/write
- * parser.py - parser of python-like code based on LEPL
- * compile.py - infrastructure to parse code
+ * parser.py - parser of python-like code based on lib2to3
+ * compile.py - infrastructure to parse and compile pyzza source code
  * fastbytes.py - bytecode optimizer

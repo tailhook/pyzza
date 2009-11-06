@@ -10,7 +10,6 @@ Implement generators
 Implement getters and setters (using decorators)
 Fill global namespace
 Make syntax error reporting even better
-Allow other files
 Make backport script for python2.6
 Mandatory optimizations:
     * remove zero jumps

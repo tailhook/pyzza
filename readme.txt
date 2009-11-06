@@ -1,10 +1,9 @@
 
 To disassemble swf call ``swf`` module::
 
-    python3 -m pyzza.swf file.swf
+    python3 -m pyzza.swf file.swf -d
 
-It will print module disassembly and also write more compact ``file.swf.swf``,
-without metadata.
+This form can also strip unneeded tags, optimize bytecode, etc. Look ``--help``.
 
 To compile python-like language (pyzza) file::
 

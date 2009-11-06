@@ -1221,10 +1221,9 @@ def main():
     global options
     op = get_options()
     options, args = op.parse_args()
-    if len(args) != 1:
-        op.error("Exacly one argument expected")
+    if len(args) < 1:
+        op.error("At least one argument expected")
     from . import parser, library
-    ast = parser.parser().parse_file(args[0])
     lib = library.Library()
     for i in options.libraries:
         lib.add_file(i)
@@ -1235,18 +1234,18 @@ def main():
         globals['Error'] = Class(lib.get_class('', 'Error'))
         globals['TypeError'] = Class(lib.get_class('', 'TypeError'))
         globals['ArgumentError'] = Class(lib.get_class('', 'ArgumentError'))
-    code_header = CodeHeader(args[0])
-    NameCheck(ast) # fills closure variable names
-    frag = CodeFragment(ast, lib, code_header,
-        filename=args[0],
-        )
-    code_header.add_method_body('', frag)
-    code_header.add_main_script(frag)
-    code_tag = code_header.make_tag()
+    code_tags = []
+    for file in args:
+        ast = parser.parser().parse_file(file)
+        code_header = CodeHeader(file)
+        NameCheck(ast) # fills closure variable names
+        frag = CodeFragment(ast, lib, code_header, filename=file)
+        code_header.add_method_body('', frag)
+        code_header.add_main_script(frag)
+        code_tags.append(code_header.make_tag())
     h = swf.Header()
-    content = [
-        tags.FileAttributes(),
-        code_tag,
+    content = [tags.FileAttributes()] \
+        + code_tags + [
         tags.SymbolClass(main_class=options.main_class),
         tags.ShowFrame(),
         ]
