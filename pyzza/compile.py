@@ -525,12 +525,16 @@ class CodeFragment:
         for name in node.names:
             package = node.module.value
             name = name.value
-            cls = self.library.get_class(package, name)
             prop = self.namespace[name]
             assert isinstance(prop, Property)
-            prop.__class__ = Class
-            prop.class_info = cls
-            prop.name = cls.name
+            try:
+                cls = self.library.get_class(package, name)
+            except library.ClassNotFoundError:
+                prop.name = abc.QName(abc.NSPackage(package), name)
+            else:
+                prop.__class__ = Class
+                prop.class_info = cls
+                prop.name = cls.name
 
     def visit_class(self, node, void):
         assert void == True
