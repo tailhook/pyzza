@@ -96,7 +96,7 @@ class Number(Leaf):
         if '.' in value:
             value = float(value)
         else:
-            value = int(value)
+            value = int(value, 0)
         super().__init__(value, context)
     def _rep(self, val):
         return val.replace(r'\"', '"').replace(r"\'", "'")\

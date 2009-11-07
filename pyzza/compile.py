@@ -439,7 +439,7 @@ class CodeFragment:
         argnum = len(self.arguments)
         if self.varargument:
             argnum += 1
-        for (idx, (name, val)) in zip(count(argnum), rcount.most_common()):
+        for (idx, (name, freq)) in zip(count(argnum), rcount.most_common()):
             regs[name] = idx
         self.local_count = argnum + len(regs)
         for bcode in self.bytecodes:
@@ -806,12 +806,12 @@ class CodeFragment:
         if isinstance(node.value, float):
             self.bytecodes.append(bytecode.pushdouble(node.value))
         elif isinstance(node.value, int):
-            if node.value < 256:
+            if node.value < 128:
                 self.bytecodes.append(bytecode.pushbyte(node.value))
             elif node.value < 65536:
                 self.bytecodes.append(bytecode.pushshort(node.value))
             else:
-                self.bytecodes.append(bytecode.pushinteger(node.value))
+                self.bytecodes.append(bytecode.pushint(node.value))
         else:
             raise NotImplementedError(node)
 
@@ -946,13 +946,13 @@ class CodeFragment:
                     self.loopstack.pop()
                     self.bytecodes.append(contlab)
                     self.bytecodes.append(bytecode.debugline(node.lineno))
-                    self.bytecodes.append(bytecode.getlocal(iterreg))
                     if step == 1:
-                        self.bytecodes.append(bytecode.increment_i())
+                        self.bytecodes.append(bytecode.inclocal_i(iterreg))
                     else:
+                        self.bytecodes.append(bytecode.getlocal(iterreg))
                         self.bytecodes.append(bytecode.getlocal(stepreg))
                         self.bytecodes.append(bytecode.add_i())
-                    self.bytecodes.append(bytecode.setlocal(iterreg))
+                        self.bytecodes.append(bytecode.setlocal(iterreg))
                     self.bytecodes.append(condlab)
                     self.bytecodes.append(bytecode.debugline(node.lineno))
                     if step == 1 or isinstance(step, parser.Number):
@@ -1215,6 +1215,15 @@ def get_options():
     op.add_option('-o', '--output', metavar="SWFFILE",
         help="Output swf data into SWFFILE.",
         dest="output", default=None, type="string")
+    op.add_option('-w', '--width', metavar="PIXELS",
+        help="Width of output flash movie in pixels",
+        dest="width", default=600, type="int")
+    op.add_option('-t', '--height', metavar="PIXELS",
+        help="Height of output flash movie in pixels",
+        dest="height", default=600, type="int")
+    op.add_option('-f', '--frame-rate', metavar="FPS",
+        help="Frame rate of output flash movie",
+        dest="frame_rate", default=15, type="int")
     return op
 
 def main():
@@ -1243,7 +1252,8 @@ def main():
         code_header.add_method_body('', frag)
         code_header.add_main_script(frag)
         code_tags.append(code_header.make_tag())
-    h = swf.Header()
+    h = swf.Header(frame_size=(int(options.width*20), int(options.height*20)),
+                   frame_rate=int(options.frame_rate*256))
     content = [tags.FileAttributes()] \
         + code_tags + [
         tags.SymbolClass(main_class=options.main_class),

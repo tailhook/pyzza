@@ -59,6 +59,15 @@ class Data(Test):
         self.testMakeList()
         self.testMakeDict()
         self.testUnpack()
+        self.testInt()
+
+    def testInt(self):
+        self.assertEquals(0x10, 16) # byte
+        self.assertEquals(2222, 0x8ae)
+        self.assertEquals(Math.floor(2222 / 256), 0x8) # short
+        self.assertEquals(0xFF0000, 16711680)
+        self.assertEquals(0xFF0000 / 65536, 255) # 32bit, sorry
+        self.assertEquals(0x870000 / 65536, 135)
 
     def testMakeList(self):
         a = [1, 2]
