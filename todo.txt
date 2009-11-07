@@ -3,7 +3,6 @@ Implement compilation of all node types (bitwise arithmetic, what else?)
 Implement loop primitives (zip, enumerate)
 Implement 'global', 'nonlocal' keywords
 Implement class variables
-Implement 'del' statement
 Implement 'assert' statement (how?)
 Implement default argument values
 Implement generators

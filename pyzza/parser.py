@@ -125,6 +125,16 @@ class Return(Node):
     def children(self):
         yield self.expr
 
+class Del(Node):
+    __slots__ = ('expr',)
+    def __init__(self, children, context):
+        _del, self.expr = children
+        assert _del.value == 'del', _del
+        super().__init__(context)
+    @property
+    def children(self):
+        yield self.expr
+
 class Raise(Node):
     __slots__ = ('expr',)
     def __init__(self, children, context):
@@ -698,6 +708,7 @@ symbols = {
     symbol.except_clause: Tuple,
     symbol.decorated: Decorated,
     symbol.return_stmt: Return,
+    symbol.del_stmt: Del,
     symbol.raise_stmt: Raise,
     symbol.listmaker_in: ListMaker,
     symbol.listmaker: _ListMaker,

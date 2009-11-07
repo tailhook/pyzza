@@ -329,6 +329,7 @@ class CodeFragment:
         parser.Class: 'class',
         parser.Func: 'function',
         parser.Assign: 'assign',
+        parser.Del: 'delete',
         parser.Call: 'call',
         parser.Name: 'varname',
         parser.String: 'string',
@@ -727,6 +728,43 @@ class CodeFragment:
                 self.bytecodes.append(bytecode.modulo())
             else:
                 raise NotImplementedError(node.operator)
+
+    def visit_delete(self, node, void):
+        assert void == True
+        self._delete(node.expr)
+
+    def _delete(self, node):
+        if isinstance(node, parser.Name):
+            reg = self.namespace[node.value]
+            if isinstance(reg, ClosureSlot):
+                self.bytecodes.append(bytecode.getlocal(self.activation))
+                self.bytecodes.append(bytecode.pushundefined())
+                self.bytecodes.append(bytecode.setslot(reg.index))
+            elif isinstance(reg, Property):
+                self.bytecodes.append(bytecode.getscopeobject(0))
+                self.bytecodes.append(bytecode.deleteproperty(
+                    reg.property_name))
+                self.bytecodes.append(bytecode.pop())
+            elif isinstance(reg, Register):
+                self.bytecodes.append(bytecode.kill(reg))
+            else:
+                raise NotImplementedError(reg)
+        elif isinstance(node, parser.GetAttr):
+            self.push_value(node.expr)
+            self.bytecodes.append(bytecode.deleteproperty(
+                self.qname(node.name.value)))
+            self.bytecodes.append(bytecode.pop())
+        elif isinstance(node, parser.Subscr):
+            self.push_value(node.expr)
+            self.push_value(node.index)
+            self.bytecodes.append(bytecode.deleteproperty(
+                abc.MultinameL(abc.NamespaceSetInfo(abc.NSPackage('')))))
+            self.bytecodes.append(bytecode.pop())
+        elif isinstance(node, parser.Tuple):
+            for n in node:
+                self._delete(n)
+        else:
+            raise NotImplementedError(node)
 
     def visit_call(self, node, void):
         name = node.expr

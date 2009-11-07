@@ -96,6 +96,10 @@ class Data(Test):
         c.test = 3
         self.assertEquals(c['test'], 3)
         self.assertEquals(c.test, 3)
+        del c.test
+        self.assertEquals(c.test, undefined)
+        del a, b, c.test
+        self.assertEquals(a, undefined)
 
     def repr(self, val):
         res = []
