@@ -36,12 +36,19 @@ class CodeHeader:
         tag.empty()
         self.tag = tag
 
-    def add_method_body(self, name, frag):
+    def add_method_body(self, name, frag, arguments=None):
         mi = abc.MethodInfo()
         mi.param_type = [abc.AnyType() for i in frag.arguments[1:]]
         mi.return_type = abc.AnyType()
         mi.name = name
         mi.flags = 0
+        if arguments:
+            options = []
+            for a in arguments:
+                if not hasattr(a, 'default'): continue
+                options.append(abc.OptionDetail(a.default.value))
+            if options:
+                mi.options = options
         if hasattr(frag, 'activation'):
             mi.flags |= abc.MethodInfo.NEED_ACTIVATION
         if frag.varargument:
@@ -216,7 +223,7 @@ class NameCheck:
         self.imported = set()
         self.exports = set()
         if hasattr(node, 'arguments'):
-            self.localnames = set(map(attrgetter('value'), node.arguments))
+            self.localnames = set(map(attrgetter('name.value'), node.arguments))
         else:
             self.localnames = set()
         self.functions = []
@@ -583,9 +590,9 @@ class CodeFragment:
     def visit_function(self, node, void):
         assert void == True
         args = node.arguments
-        if len(args) >= 2 and args[-2].value == '*':
-            vararg = args[-1].value
-            args = args[:-2]
+        if len(args) >= 1 and isinstance(args[-1], parser.Vararg):
+            vararg = args[-1].name.value
+            args = args[:-1]
         else:
             vararg = None
         if self.mode == 'class_body':
@@ -596,14 +603,14 @@ class CodeFragment:
             frag = CodeFragment(node, self.library, self.code_header,
                 mode="method",
                 parent_namespaces=self.parent_namespaces,
-                arguments=list(map(attrgetter('value'), args)),
+                arguments=list(map(attrgetter('name.value'), args)),
                 varargument=vararg,
                 filename=self.filename,
                 )
             self.namespace[node.name.value] = Method(frag)
             self.code_header.add_method_body(
                 '{}/{}'.format(self.class_name.value, node.name.value),
-                frag)
+                frag, node.arguments)
         else:
             package = abc.NSPrivate(self.filename)
             if node.decorators:
@@ -619,14 +626,14 @@ class CodeFragment:
                 mode="function",
                 parent_namespaces=(self,) + self.parent_namespaces,
                 arguments=[None] + list(
-                    map(attrgetter('value'), args)),
+                    map(attrgetter('name.value'), args)),
                 varargument=vararg,
                 filename=self.filename,
                 )
             mbody = self.code_header.add_method_body(
                 '{}${:d}:{}'.format(self.filename,
                 node.lineno, node.name.value),
-                frag)
+                frag, node.arguments)
             prop = self.namespace[node.name.value]
             if isinstance(prop, Property):
                 prop.__class__ = NewFunction

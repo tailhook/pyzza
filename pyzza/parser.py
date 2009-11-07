@@ -374,6 +374,28 @@ def _DictMaker(children, context):
 class Parameters(GenericNode):
     __slots__ = ()
 
+class Argument(Node):
+    __slots__ = ('name', 'type', 'default')
+    def __init__(self, children, context):
+        self.name = children[0]
+        if len(children) > 1:
+            if children[1].value == '=':
+                assert len(children) == 3
+                self.default = children[2]
+            elif children[1].value == ':':
+                self.type = children[2]
+                if len(children) > 3:
+                    assert len(children) == 5
+                    assert children[3].value == '='
+                    self.default = children[4]
+        super().__init__(context)
+
+class Vararg(Argument):
+    __slots__ = ()
+    def __init__(self, children, context):
+        assert children[0].value == '*'
+        super().__init__(children[1:], context)
+
 def _Parameters(children, context):
     if children:
         assert len(children) == 1, children
@@ -715,6 +737,8 @@ symbols = {
     symbol.dictmaker_in: DictMaker,
     symbol.dictmaker: _DictMaker,
     symbol.testlist_gexp: GenExp,
+    symbol.typedarg: Argument,
+    symbol.typedvararg: Vararg,
     symbol.file_input: FileInput,
     }
 

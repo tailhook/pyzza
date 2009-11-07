@@ -530,6 +530,10 @@ class Functions(Test):
             return "Hello " + name
         self.assertEquals(hello("world"), 'Hello world')
         self.assertEquals(global_fun(4, 3), 7)
+        def testdef(a=7):
+            return a*3
+        self.assertEquals(testdef(4), 12)
+        self.assertEquals(testdef(), 21)
 
     def testClosure(self):
         a = 13

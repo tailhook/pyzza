@@ -241,6 +241,7 @@ class MethodInfo(ABCStruct):
             self.flags &= ~self.HAS_PARAM_NAMES
         stream.write_u8(self.flags)
         if hasattr(self, 'options'):
+            stream.write_u30(len(self.options))
             for o in self.options:
                 o.write(stream, index)
         if hasattr(self, 'param_name'):
@@ -270,13 +271,14 @@ CONSTANT_PrivateNs          = 0x05
 
 class OptionDetail(ABCStruct):
 
+    def __init__(self, value):
+        self.value = value
+
     @classmethod
     def read(cls, stream, index):
-        self = cls()
         val = stream.read_u30()
         kind = stream.read_u8()
-        self.value = index.get_constant(kind, val)
-        return self
+        return cls(index.get_constant(kind, val))
 
     def write(self, stream, index):
         kind, val = index.get_constant_index(self.value)
@@ -859,8 +861,10 @@ class Index(object):
             return None
         elif kind == CONSTANT_Undefined:
             return Undefined()
-        else:
+        elif kind in namespace_kinds:
             return self.get_namespace(val)
+        else:
+            raise NotImplementedError(kind)
 
     def get_constant_index(self, value):
         if value is True:
@@ -879,8 +883,10 @@ class Index(object):
             return CONSTANT_Int, self.get_integer_index(value)
         elif isinstance(value, str):
             return CONSTANT_Utf8, self.get_string_index(value)
-        else:
+        elif isinstance(value, NamespaceInfo):
             return value.kind, self.get_namespace_index(value)
+        else:
+            raise NotImplementedError(value)
 
     def __enter__(self):
         return self

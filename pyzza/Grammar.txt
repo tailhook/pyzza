@@ -15,14 +15,16 @@ decorators: decorator+
 decorated: decorators (classdef | funcdef)
 funcdef: 'def' NAME parameters ['->' test] ':' suite
 parameters: '(' [typedargslist] ')'
-typedargslist: ((tfpdef ['=' test] ',')*
-                ('*' [tname] (',' tname ['=' test])* [',' '**' tname] | '**' tname)
-                | tfpdef ['=' test] (',' tfpdef ['=' test])* [','])
+typedarg: tname ['=' test]
+typedargslist: ((typedarg ',')*
+                ( typedvararg (',' typedarg)*)
+                | typedarg (',' typedarg)* [','])
+typedvararg: '*' tname
 tname: NAME [':' test]
 tfpdef: tname
 tfplist: tfpdef (',' tfpdef)* [',']
 varargslist: ((vfpdef ['=' test] ',')*
-              ('*' [vname] (',' vname ['=' test])*  [',' '**' vname] | '**' vname)
+              ('*' [vname] (',' vname ['=' test])*)
               | vfpdef ['=' test] (',' vfpdef ['=' test])* [','])
 vname: NAME
 vfpdef: vname | '(' vfplist ')'
