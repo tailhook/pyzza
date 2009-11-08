@@ -32,6 +32,8 @@ Differences from Python
  * attributes defined in class-body are static attributes
  * static attributes can be get only from class not from instance of suclass
     (limitation of AVM)
+ * only tuple of strings can be value of ``__slots__``, this attribute is not
+    accessible at runtime
  * ``def``s inside classes are bound to class statically (mostly limitation of
     ActionScript Bytecode/Virtual Machine)
  * apart from that any code can be in class body, local

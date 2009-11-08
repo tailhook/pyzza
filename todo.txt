@@ -1,5 +1,3 @@
-Implement class variables
-Implement '__slots__'
 Implement try...finally
 Implement compilation of all node types (bitwise arithmetic, what else?)
 Implement loop primitives (zip, enumerate)
@@ -22,5 +20,5 @@ Optional optimizations:
     * setlocal, getlocal -> dup, setlocal (easy)
     * sort activation slots according to usage frequency (easy)
     * derive variable types, optimize method dispatch and int arithmetic (hard)
-    * optimize attribute lookups (getproperty -> getslot) by analyzing class body
+    * optimize attribute lookups (getproperty -> getslot)
     * optimize constant class variables (easy)

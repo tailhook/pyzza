@@ -2,6 +2,7 @@ from itertools import chain, count
 from operator import methodcaller, attrgetter
 from collections import Counter
 from contextlib import contextmanager
+import copy
 
 from . import parser, library, swf, bytecode, abc, tags
 
@@ -74,11 +75,20 @@ class CodeHeader:
         self.tag.real_body.method_body_info.append(mb)
         return mb
 
-    def add_class(self, name, bases, frag, package):
+    def add_class(self, name, bases, frag, package, slots=()):
         cls = abc.ClassInfo()
         inst = abc.InstanceInfo()
         cls.instance_info = inst
         cls.cinit = frag._method_info
+        traits = []
+        for (k, m) in frag.namespace.items():
+            if k == '__init__': continue
+            if isinstance(m, Property):
+                traits.append(abc.TraitsInfo(
+                    abc.QName(abc.NSPackage(''), k),
+                    abc.TraitSlot(),
+                    attr=0))
+        cls.trait = traits
         cls.trait = []
         inst.name = abc.QName(package, name)
         inst.super_name = bases[0].name
@@ -98,15 +108,18 @@ class CodeHeader:
                     abc.QName(abc.NSPackage(''), k),
                     abc.TraitMethod(m.code_fragment._method_info),
                     attr=flag))
-            elif isinstance(m, Register):
-                pass #nothing needed
-            elif isinstance(m, Property):
+        if slots:
+            sealed = True
+            for (index, k) in enumerate(slots):
+                if k == '__dict__':
+                    sealed = False
+                    continue
                 traits.append(abc.TraitsInfo(
                     abc.QName(abc.NSPackage(''), k),
                     abc.TraitSlot(),
                     attr=0))
-            else:
-                raise NotImplementedError(m)
+            if sealed:
+                inst.flags |= abc.InstanceInfo.CONSTANT_ClassSealed
         inst.trait = traits
         self.tag.real_body.class_info.append(cls)
         return cls
@@ -247,6 +260,9 @@ class NameCheck:
         node.func_locals = frozenset(self.localnames)
         node.func_globals = frozenset(glob | self.allnames - self.localnames)
         node.func_imports = frozenset(self.imported)
+        if hasattr(self, 'slots'):
+            assert isinstance(node, parser.Class)
+            node.class_slots = self.slots
         #~ print(getattr(node, 'name', None),
             #~ node.func_globals, node.func_locals, node.func_export)
 
@@ -275,6 +291,10 @@ class NameCheck:
 
     def visit_assign(self, node):
         if isinstance(node.target, parser.Name):
+            if node.target.value == '__slots__':
+                assert isinstance(node.expr, parser.Tuple)
+                assert all(isinstance(n, parser.String) for n in node.expr)
+                self.slots = tuple(map(attrgetter('value'), node.expr))
             self.localnames.add(node.target.value)
         elif isinstance(node.target, parser.Tuple):
             for n in node.target:
@@ -580,7 +600,7 @@ class CodeFragment:
             bases.append(val)
             val = val.get_base()
         cls = self.code_header.add_class(node.name.value, bases, frag,
-            package=package)
+            package=package, slots=getattr(node, 'class_slots', ()))
         prop = self.namespace[node.name.value]
         if isinstance(prop, Property):
             prop.__class__ = NewClass
@@ -716,6 +736,9 @@ class CodeFragment:
 
     def visit_assign(self, node, void):
         assert void == True
+        if self.mode == 'class_body' and isinstance(node.target, parser.Name)\
+            and node.target.value == '__slots__':
+            return
         with self.assign(node.target):
             if node.operator.value != '=':
                 if isinstance(node.target, parser.Name):
@@ -1301,6 +1324,7 @@ def main():
         globals['Error'] = Class(lib.get_class('', 'Error'))
         globals['TypeError'] = Class(lib.get_class('', 'TypeError'))
         globals['ArgumentError'] = Class(lib.get_class('', 'ArgumentError'))
+        globals['ReferenceError'] = Class(lib.get_class('', 'ReferenceError'))
     code_tags = []
     for file in args:
         ast = parser.parser().parse_file(file)

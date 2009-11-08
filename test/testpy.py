@@ -496,6 +496,26 @@ class B(A):
     def world(self):
         return super().world() + ' bear'
 
+class SlotA:
+    __slots__ = ('a', 'b')
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+
+class SlotB(SlotA):
+    __slots__ = ('c', 'd')
+    def __init__(self, c, d):
+        super().__init__(c + d, c - d)
+        self.c = c
+        self.d = d
+
+class SlotC(SlotA):
+    __slots__ = ('c', '__dict__')
+    def __init__(self, c, d):
+        super().__init__(c + d, c - d)
+        self.c = c
+        self.d = d
+
 class TestClass(Test):
     def __init__(self, reporter, name):
         super().__init__(reporter, name)
@@ -503,6 +523,7 @@ class TestClass(Test):
     def test(self):
         self.testOverride()
         self.testStatic()
+        self.testSlots()
 
     def testOverride(self):
         self.assertEquals(A().hello(), 'hello')
@@ -525,6 +546,29 @@ class TestClass(Test):
         self.assertEquals(A().STATIC1, undefined)
         self.assertEquals(B().STATIC1, undefined)
         self.assertEquals(B().STATIC3, undefined)
+
+    def testSlots(self):
+        a = SlotA(2, 3)
+        self.assertEquals(a.a, 2)
+        self.assertEquals(a.b, 3)
+        b = SlotB(7, 4)
+        self.assertEquals(b.a, 11)
+        self.assertEquals(b.b, 3)
+        self.assertEquals(b.c, 7)
+        self.assertEquals(b.d, 4)
+        try:
+            b.e = 'hello'
+        except ReferenceError:
+            pass
+        else:
+            raise Failure("ReferenceError not raised")
+        c = SlotC(7, 4)
+        c.e = 'hello'
+        self.assertEquals(c.a, 11)
+        self.assertEquals(c.b, 3)
+        self.assertEquals(c.c, 7)
+        self.assertEquals(c.d, 4)
+        self.assertEquals(c.e, 'hello')
 
 def global_fun(a, b):
     return (a+b)*(a-b)
