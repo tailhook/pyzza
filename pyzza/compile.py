@@ -66,7 +66,7 @@ class CodeHeader:
         for (k, v) in frag.namespace.items():
             if isinstance(v, ClosureSlot):
                 traits.append(abc.TraitsInfo(
-                    abc.QName(abc.NSInternal(), k),
+                    abc.QName(abc.NSPrivate(frag.filename), k),
                     abc.TraitSlot(v.index),
                     attr=0))
         mb.traits_info = traits
@@ -100,6 +100,11 @@ class CodeHeader:
                     attr=flag))
             elif isinstance(m, Register):
                 pass #nothing needed
+            elif isinstance(m, Property):
+                traits.append(abc.TraitsInfo(
+                    abc.QName(abc.NSPackage(''), k),
+                    abc.TraitSlot(),
+                    attr=0))
             else:
                 raise NotImplementedError(m)
         inst.trait = traits
@@ -392,8 +397,12 @@ class CodeFragment:
             ]
         if mode == 'class_body':
             self.class_name = ast.name
-        self.namespace = {k: Register() for k in ast.func_locals
-            if k not in ast.func_export}
+            assert not ast.func_export
+            self.namespace = {k: Property(abc.QName(abc.NSPackage(''),k))
+                for k in ast.func_locals}
+        else:
+            self.namespace = {k: Register() for k in ast.func_locals
+                if k not in ast.func_export}
         for k in ast.func_imports:
             self.namespace[k] = Property()
         if ast.func_export:
@@ -522,8 +531,8 @@ class CodeFragment:
     def qname(self, name):
         return abc.QName(abc.NSPackage(''), name)
 
-    def qintern(self, name):
-        return abc.QName(abc.NSInternal(), name)
+    def qpriv(self, name):
+        return abc.QName(abc.NSPrivate(self.filename), name)
 
     ##### Visitors #####
 
@@ -560,7 +569,7 @@ class CodeFragment:
             parent_namespaces=(self,) + self.parent_namespaces,
             filename=self.filename,
             )
-        self.code_header.add_method_body('', frag)
+        self.code_header.add_method_body(node.name.value, frag)
         assert len(node.bases) <= 1
         if not node.bases:
             val = self.library.get_class('', 'Object')
@@ -829,7 +838,7 @@ class CodeFragment:
                 self.bytecodes.append(bytecode.getlocal(self.activation))
                 self.bytecodes.append(bytecode.getslot(val.index))
             else:
-                self.bytecodes.append(bytecode.getlex(self.qintern(val.name)))
+                self.bytecodes.append(bytecode.getlex(self.qpriv(val.name)))
         elif isinstance(val, Property):
             if val.name in self.namespace:
                 self.bytecodes.append(bytecode.getscopeobject(0))

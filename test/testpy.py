@@ -474,6 +474,8 @@ class Exceptions(Test):
         self.assertEquals(a, 'ErrError')
 
 class A:
+    STATIC1 = 1
+    STATIC2 = 4
     def __init__(self):
         pass
 
@@ -484,6 +486,7 @@ class A:
         return self.hello() + ' baby'
 
 class B(A):
+    STATIC3 = 111
     def __init__(self):
         super().__init__()
 
@@ -499,6 +502,7 @@ class TestClass(Test):
 
     def test(self):
         self.testOverride()
+        self.testStatic()
 
     def testOverride(self):
         self.assertEquals(A().hello(), 'hello')
@@ -509,6 +513,18 @@ class TestClass(Test):
         a = B()
         self.assertEquals(a.hello(), 'Hello!')
         self.assertEquals(a.world(), 'Hello! baby bear')
+
+    def testStatic(self):
+        self.assertEquals(A.STATIC1, 1)
+        self.assertEquals(A.STATIC2, 4)
+        self.assertEquals(B.STATIC3, 111)
+        # following works in python, but unfortunately not works in AVM
+        # it would be great if somebody can find a way for this to work
+        self.assertEquals(B.STATIC1, undefined)
+        self.assertEquals(B.STATIC2, undefined)
+        self.assertEquals(A().STATIC1, undefined)
+        self.assertEquals(B().STATIC1, undefined)
+        self.assertEquals(B().STATIC3, undefined)
 
 def global_fun(a, b):
     return (a+b)*(a-b)

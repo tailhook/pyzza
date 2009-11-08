@@ -23,3 +23,4 @@ Optional optimizations:
     * sort activation slots according to usage frequency (easy)
     * derive variable types, optimize method dispatch and int arithmetic (hard)
     * optimize attribute lookups (getproperty -> getslot) by analyzing class body
+    * optimize constant class variables (easy)

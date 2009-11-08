@@ -6,6 +6,8 @@ from collections import defaultdict, Counter
 from .tags import Tag, TAG_DoABC
 from .io import DummyABCStream, ABCStream, uint
 
+nothing = object()
+
 class Offset(int): pass
 class Register(int): pass
 

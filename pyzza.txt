@@ -28,19 +28,22 @@ Differences from Python
  * only ``from P.A.C.K.A.G.E import CLASSNAME`` form of import statement
     currently supported
  * ``import``s are compile-time ones
- * decorators are also compile-time, only class decorator ``package`` is
-    currently supported
- * ``del``s remove reference dynamically but removes name at compile time, it
-    can lead to subtle errors if using ``del`` inside conditional statement
+ * decorators are also compile-time only few are supported
  * attributes defined in class-body are static attributes
+ * static attributes can be get only from class not from instance of suclass
+    (limitation of AVM)
  * ``def``s inside classes are bound to class statically (mostly limitation of
     ActionScript Bytecode/Virtual Machine)
- * apart from that any code can be in class body, non ``del``eted local
+ * apart from that any code can be in class body, local
     variables will be static members
  * global functions like ``range()``, ``len()`` etc. are not functions, they are
-    reserved words. Also ``range()`` works only inside ``for`` statement
+    inlined builtins. Also ``range()`` works only inside ``for`` statement
  * only positional arguments supported
  * only constant default values for arguments supported
+ * to iterate over array you must use ``values(array)`` to iterate over dict
+    there is ``keys()``, ``items()`` and ``values()`` and they all are inlined
+    functions, by default ``for`` assumes expression is generator (not
+    implemented yet)
 
 Differences from ActionScript
 -----------------------------
@@ -54,7 +57,3 @@ Differences from ActionScript
     superset of python syntax)
  * No typed arguments or typed variables, no variable declarations either
 
-Current limitations
--------------------
-
- * Can only compile one file
