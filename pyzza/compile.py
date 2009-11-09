@@ -445,6 +445,7 @@ class CodeFragment:
                 raise NotImplementedError(mode)
 
         self.loopstack = [] # pairs of continue label and break label
+        self.extra_registers = [] # extra registers used for computations
         self.exceptions = []
         self.mode = mode
         self.parent_namespaces = parent_namespaces
@@ -556,6 +557,23 @@ class CodeFragment:
 
     def qpriv(self, name):
         return abc.QName(abc.NSPrivate(self.filename), name)
+
+    def get_extra_reg(self):
+        try:
+            return self.extra_registers.pop()
+        except IndexError:
+            return Register()
+
+    def free_extra_reg(self, reg):
+        self.extra_registers.append(reg)
+
+    @contextmanager
+    def extra_reg(self):
+        reg = self.get_extra_reg()
+        try:
+            yield reg
+        finally:
+            self.free_extra_reg(reg)
 
     ##### Visitors #####
 
@@ -1297,6 +1315,38 @@ class CodeFragment:
         self.bytecodes.append(bytecode.ifge(endlabel))
         self.bytecodes.append(bytecode.negate())
         self.bytecodes.append(bytecode.coerce_a())
+        self.bytecodes.append(endlabel)
+
+    def call_min(self, node, void):
+        assert len(node.arguments) == 2
+        endlabel = bytecode.Label()
+        self.push_value(node.arguments[0])
+        self.bytecodes.append(bytecode.coerce_a())
+        self.bytecodes.append(bytecode.dup())
+        with self.extra_reg() as reg:
+            self.push_value(node.arguments[1])
+            self.bytecodes.append(bytecode.dup())
+            self.bytecodes.append(bytecode.coerce_a())
+            self.bytecodes.append(bytecode.setlocal(reg))
+            self.bytecodes.append(bytecode.ifle(endlabel))
+            self.bytecodes.append(bytecode.pop())
+            self.bytecodes.append(bytecode.getlocal(reg))
+        self.bytecodes.append(endlabel)
+
+    def call_max(self, node, void):
+        assert len(node.arguments) == 2
+        endlabel = bytecode.Label()
+        self.push_value(node.arguments[0])
+        self.bytecodes.append(bytecode.coerce_a())
+        self.bytecodes.append(bytecode.dup())
+        with self.extra_reg() as reg:
+            self.push_value(node.arguments[1])
+            self.bytecodes.append(bytecode.dup())
+            self.bytecodes.append(bytecode.coerce_a())
+            self.bytecodes.append(bytecode.setlocal(reg))
+            self.bytecodes.append(bytecode.ifge(endlabel))
+            self.bytecodes.append(bytecode.pop())
+            self.bytecodes.append(bytecode.getlocal(reg))
         self.bytecodes.append(endlabel)
 
 def get_options():

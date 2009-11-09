@@ -236,6 +236,14 @@ class TestMath(Test):
         a = 5
         self.assertEquals(abs(a+2), 7)
         self.assertEquals(abs(a-7), 2)
+        # min
+        self.assertEquals(min(5, 7), 5)
+        self.assertEquals(min(4, -1), -1)
+        self.assertEquals(min(-4, -1), -4)
+        # max
+        self.assertEquals(max(5, 7), 7)
+        self.assertEquals(max(4, -1), 4)
+        self.assertEquals(max(-4, -1), -1)
 
 class Loops(Test):
     def __init__(self, reporter, name):
