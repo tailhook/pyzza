@@ -133,6 +133,7 @@ class TestMath(Test):
         self.boolean()
         self.precedence()
         self.augmented_assign()
+        self.builtins()
 
     def operators(self):
         self.assertEquals(2*3, 6)
@@ -227,6 +228,14 @@ class TestMath(Test):
         self.assertEquals(i, 15)
         i %= 7
         self.assertEquals(i, 1)
+
+    def builtins(self):
+        # abs
+        self.assertEquals(abs(-1), 1)
+        self.assertEquals(abs(3), 3)
+        a = 5
+        self.assertEquals(abs(a+2), 7)
+        self.assertEquals(abs(a-7), 2)
 
 class Loops(Test):
     def __init__(self, reporter, name):

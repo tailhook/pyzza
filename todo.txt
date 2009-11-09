@@ -6,6 +6,7 @@ Implement 'assert' statement (how?)
 Implement generators
 Implement getters and setters (using decorators)
 Fill global namespace
+Allow to supply '.swc' file as library
 Make syntax error reporting even better
 Make backport script for python2.6
 Mandatory optimizations:

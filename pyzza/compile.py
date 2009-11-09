@@ -217,6 +217,9 @@ globals = {
     'items': Builtin('items'),
     'values': Builtin('values'),
     'abs': Builtin('abs'),
+    'min': Builtin('min'),
+    'max': Builtin('max'),
+    'len': Builtin('len'),
     }
 
 class Globals:
@@ -822,6 +825,8 @@ class CodeFragment:
                     len(node.arguments)))
                 if void:
                     self.bytecodes.append(bytecode.pop())
+            elif isinstance(val, Builtin):
+                getattr(self, 'call_' + val.name)(node, void)
             else:
                 self.push_value(node.expr)
                 self.bytecodes.append(bytecode.pushnull())
@@ -1279,6 +1284,20 @@ class CodeFragment:
     @binary
     def visit_lesseq(self, node):
         self.bytecodes.append(bytecode.lessequals())
+
+    ##### Built-in functions #####
+
+    def call_abs(self, node, void):
+        assert len(node.arguments) == 1
+        endlabel = bytecode.Label()
+        self.push_value(node.arguments[0])
+        self.bytecodes.append(bytecode.coerce_a())
+        self.bytecodes.append(bytecode.dup())
+        self.bytecodes.append(bytecode.pushbyte(0))
+        self.bytecodes.append(bytecode.ifge(endlabel))
+        self.bytecodes.append(bytecode.negate())
+        self.bytecodes.append(bytecode.coerce_a())
+        self.bytecodes.append(endlabel)
 
 def get_options():
     import optparse
