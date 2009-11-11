@@ -135,6 +135,9 @@ class CodeHeader:
             elif isinstance(val, NewFunction):
                 trait.append(abc.TraitsInfo(val.property_name,
                     abc.TraitMethod(val.method_info)))
+            elif isinstance(val, Property):
+                trait.append(abc.TraitsInfo(val.property_name,
+                    abc.TraitSlot()))
         script.traits_info = trait
         self.tag.real_body.script_info.append(script)
         return script

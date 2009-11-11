@@ -51,15 +51,23 @@ class Test:
         else:
             self.reporter.ok()
 
+CONST1 = 11
+CONST2 = 22
+
 class Data(Test):
     def __init__(self, reporter, name):
         super().__init__(reporter, name)
 
     def test(self):
+        self.testConst()
         self.testMakeList()
         self.testMakeDict()
         self.testUnpack()
         self.testInt()
+
+    def testConst(self):
+        self.assertEquals(CONST1, 11)
+        self.assertEquals(CONST2, 22)
 
     def testInt(self):
         self.assertEquals(0x10, 16) # byte
