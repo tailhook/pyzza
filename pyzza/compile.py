@@ -847,10 +847,10 @@ class CodeFragment:
             name = name.value
             val = self.find_name(name)
             if isinstance(val, (Class, NewClass)):
-                self.bytecodes.append(bytecode.findpropstrict(val.property_name))
+                self.bytecodes.append(bytecode.getlex(val.property_name))
                 for i in node.arguments:
                     self.push_value(i)
-                self.bytecodes.append(bytecode.constructprop(val.property_name,
+                self.bytecodes.append(bytecode.construct(
                     len(node.arguments)))
                 if void:
                     self.bytecodes.append(bytecode.pop())

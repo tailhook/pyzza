@@ -5,6 +5,7 @@ Implement 'global', 'nonlocal' keywords
 Implement 'assert' statement (how?)
 Implement generators
 Implement getters and setters (using decorators)
+Implement regular expressions
 Fill global namespace
 Allow to supply '.swc' file as library
 Make syntax error reporting even better

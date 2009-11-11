@@ -294,6 +294,14 @@ class Loops(Test):
         else:
             j = 1
         self.assertEquals(j, 0)
+        j = 0
+        for i in range(11):
+            if i < 3:
+                continue
+            j += 1
+        else:
+            j += 100
+        self.assertEquals(j, 108)
 
     def testRange5(self):
         j = 0

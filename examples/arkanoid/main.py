@@ -1,16 +1,16 @@
 from flash.display import Sprite
-from flash.display import StageAlign
-from flash.display import StageScaleMode
-from flash.events import KeyboardEvent
-from flash.events import Event
+from flash.display import StageAlign, StageScaleMode
+from flash.events import Event, KeyboardEvent
 from flash.text import TextField
 from flash.utils import getTimer
+from flash.geom import Matrix
+from flash.display import GradientType, SpreadMethod
 
 class Ball(Sprite):
     def __init__(self, field):
         self.field = field
         self.graphics.beginFill(0xFF0000)
-        self.graphics.drawCircle(0, 0, 10)
+        self.graphics.drawCircle(0, 0, field.BALLRADIUS)
         self.graphics.endFill()
         self.cacheAsBitmap = True
 
@@ -52,15 +52,15 @@ class Racket(Sprite):
         self.field = field
         self.pos = 0.5
         self.x = Math.round((field.TOTALWIDTH - self.racket_width)*self.pos)
-        self.y = field.TOTALHEIGHT - field.CUBEHEIGHT - field.PADDING
+        self.y = field.TOTALHEIGHT - field.BRICKHEIGHT - field.PADDING
         self.graphics.beginFill(0x0000FF)
         self.graphics.drawRoundRect(0, 0, self.racket_width,
-            field.CUBEHEIGHT, field.ROUND)
+            field.BRICKHEIGHT, field.ROUND)
         self.graphics.endFill()
         self.graphics.beginFill(0xB0B0B0)
         self.graphics.drawRoundRect(field.LINEWIDTH, field.LINEWIDTH,
             self.racket_width - field.LINEWIDTH*2,
-            field.CUBEHEIGHT - field.LINEWIDTH*2,
+            field.BRICKHEIGHT - field.LINEWIDTH*2,
             field.ROUND - field.LINEWIDTH)
         self.graphics.endFill()
         self.cacheAsBitmap = True
@@ -83,20 +83,26 @@ class Racket(Sprite):
         del self.keys, self.speed
 
     def keydown(self, event):
-        #~ code = self.keycodes[ (event.altKey and 'a' or '')
-                             #~ +(event.ctrlKey and 'c' or '')
-                             #~ +(event.shiftKey and 's' or'')
-                             #~ + String(event.keyCode)]
-        code = self.keycodes[String(event.keyCode)]
+        code = String(event.keyCode)
+        if event.shiftKey:
+            code = 's' + code
+        if event.ctrlKey:
+            code = 'c' + code
+        if event.altKey:
+            code = 'a' + code
+        code = self.keycodes[code]
         if code:
             self.keys[code] = True
 
     def keyup(self, event):
-        #~ code = self.keycodes[ (event.altKey and 'a' or '')
-                             #~ +(event.ctrlKey and 'c' or '')
-                             #~ +(event.shiftKey and 's' or'')
-                             #~ + String(event.keyCode)]
-        code = self.keycodes[String(event.keyCode)]
+        code = String(event.keyCode)
+        if event.shiftKey:
+            code = 's' + code
+        if event.ctrlKey:
+            code = 'c' + code
+        if event.altKey:
+            code = 'a' + code
+        code = self.keycodes[code]
         if code:
             del self.keys[code]
 
@@ -122,19 +128,29 @@ class Racket(Sprite):
                 - self.field.PADDING*2)*self.pos + self.field.PADDING)
 
 class Brick(Sprite):
-    def __init__(self, field, left, top, width, height):
-        self.x = field.PADDING + left*field.CUBEWIDTH + (left-1)*field.SPACING
-        self.y = field.PADDING + top*field.CUBEHEIGHT + (top-1)*field.SPACING
-        self.graphics.beginFill(0x808080)
-        self.graphics.drawRoundRect(0, 0,
-            width*field.CUBEWIDTH + field.SPACING*(width-1),
-            height*field.CUBEHEIGHT + field.SPACING*(height-1),
-            field.ROUND)
+    def __init__(self, field, brickdef):
+        m = Matrix()
+        fullw = field.BRICKWIDTH
+        fullh = field.BRICKHEIGHT
+        m.createGradientBox(fullw, fullh, 0, -fullw/4, -fullh/4)
+        self.graphics.beginGradientFill(GradientType.RADIAL,
+            [0xFFFFFF, brickdef.color], #colors
+            [1.0, 1.0], #alphas
+            [0, 255], #ratios
+            m, # transform matrix
+            SpreadMethod.PAD)
+        self.graphics.drawRoundRect(0, 0, fullw, fullh, field.ROUND)
         self.graphics.endFill()
-        self.graphics.beginFill(0xB0B0B0)
+        m.createGradientBox(fullw*3, fullh*3, 0, -fullw/4, -fullh/4)
+        self.graphics.beginGradientFill(GradientType.RADIAL,
+            [0xFFFFFF, brickdef.color], #colors
+            [1.0, 1.0], #alphas
+            [0, 255], #ratios
+            m, # transform matrix
+            SpreadMethod.PAD)
         self.graphics.drawRoundRect(field.LINEWIDTH, field.LINEWIDTH,
-            width*field.CUBEWIDTH+field.SPACING*(width-1)-field.LINEWIDTH*2,
-            height*field.CUBEHEIGHT+field.SPACING*(height-1)-field.LINEWIDTH*2,
+            field.BRICKWIDTH-field.LINEWIDTH*2,
+            field.BRICKHEIGHT-field.LINEWIDTH*2,
             field.ROUND-field.LINEWIDTH)
         self.graphics.endFill()
         self.cacheAsBitmap = True
@@ -142,21 +158,64 @@ class Brick(Sprite):
     def hit(self): # die on first hit
         return True
 
+class BrickDef:
+    def __init__(self, color):
+        self.color = color
+
+class Level:
+    def __init__(self, bricks, levelset):
+        self.bricks = bricks
+        self.levelset = levelset
+
+    def populate(self, field):
+        lines = {}
+        y = 0
+        for line in values(self.levelset.split('\n')):
+            x = 0
+            for i in range(line.length):
+                c = line.charAt(i)
+                if ' \n\t\r'.indexOf(c) >= 0:
+                    continue
+                if c == '.':
+                    pass
+                elif self.bricks[c]:
+                    b = Brick(field, self.bricks[c])
+                    field.add_brick(x, y, b)
+                x += 1
+            if x:
+                y += 1
+
+level1 = Level({
+    'r': BrickDef(0xFF0000),
+    'g': BrickDef(0x00FF00),
+    'b': BrickDef(0x0000FF),
+    },
+    """
+    rrrrggggggrrrr
+    ggggbbbbbbgggg
+    rrrrbbbbbbrrrr
+    ggggbbbbbbgggg
+    rrrrggggggrrrr
+    """)
+
 @package('arkanoid')
 class Field(Sprite):
     def __init__(self, width, height):
+        #debug
+        label = TextField()
+        self.label = label
+        self.addChild(label)
+        #enddebug
         self.TOTALWIDTH = width
         self.TOTALHEIGHT = height
         self.init_const()
         self.draw()
         self.ball = Ball(self)
         self.racket = Racket(self)
-        self.bricks = []
-        self.make_bricks()
+        self.bricks = {}
+        level1.populate(self)
         self.addChild(self.ball)
         self.addChild(self.racket)
-        for b in values(self.bricks):
-            self.addChild(b)
 
     def start(self):
         self.addEventListener(Event.ENTER_FRAME, self.frame)
@@ -179,19 +238,44 @@ class Field(Sprite):
             self.ball.speed_y = -self.ball.speed_y
             if self.racket.speed:
                 self.ball.speed_x += self.racket.speed*0.5
-        for b in values(self.bricks):
+        bx = (self.ball.x - self.PADDING)
+        bax = Math.floor((bx - self.BALLRADIUS) / self.BRICKWIDTH)
+        bbx = Math.floor((bx + self.BALLRADIUS) / self.BRICKWIDTH)
+        by = (self.ball.y - self.PADDING)
+        bay = Math.floor((by - self.BALLRADIUS) / self.BRICKHEIGHT)
+        bby = Math.floor((by + self.BALLRADIUS) / self.BRICKHEIGHT)
+        self.label.text = [
+                bax + ',' + bay,
+                bax + ',' + bby,
+                bbx + ',' + bay,
+                bby + ',' + bby,
+                ].join(', ')
+        for bkey in values([
+                bax + ',' + bay,
+                bax + ',' + bby,
+                bbx + ',' + bay,
+                bby + ',' + bby,
+                ]):
+            b = self.bricks[bkey]
+            if not b: continue
             if test(b) and b.hit():
-                self.bricks.splice(self.bricks.indexOf(b), 1)
+                del self.bricks[bkey]
                 self.removeChild(b)
         self.old_frame = newframe
 
     def init_const(self):
+        self.BALLRADIUS = 10
         self.PADDING = 20
-        self.CUBEHEIGHT = 20
-        self.CUBEWIDTH = 20
-        self.SPACING = 10
+        self.BRICKWIDTH = 40
+        self.BRICKHEIGHT = 20
         self.ROUND = 10
         self.LINEWIDTH = 3
+
+    def add_brick(self, x, y, brick):
+        self.bricks[x + ',' + y] = brick
+        brick.x = self.PADDING+self.BRICKWIDTH*x
+        brick.y = self.PADDING+self.BRICKHEIGHT*y
+        self.addChild(brick)
 
     def draw(self):
         self.graphics.lineStyle(2)
@@ -199,19 +283,11 @@ class Field(Sprite):
             self.TOTALWIDTH - 10, self.TOTALHEIGHT-10,
             self.ROUND, self.ROUND)
 
-    def make_bricks(self):
-        for i in range(5):
-            self.make_line(i)
-
-    def make_line(self, index):
-        for j in range(10):
-            self.bricks.push(Brick(self, j*3, index, 3, 1))
-
 @package('arkanoid')
 class Main(Sprite):
     def __init__(self):
         self.stage.align = StageAlign.TOP_LEFT
         self.stage.scaleMode = StageScaleMode.NO_SCALE
-        f = Field(self.stage.stageWidth, self.stage.stageHeight)
+        f = Field(600, 400)
         self.addChild(f)
         f.start()

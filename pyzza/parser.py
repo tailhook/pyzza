@@ -727,6 +727,7 @@ symbols = {
     symbol.while_stmt: While,
     symbol.try_stmt: Try,
     symbol.break_stmt: Break,
+    symbol.continue_stmt: Continue,
     symbol.except_clause: Tuple,
     symbol.decorated: Decorated,
     symbol.return_stmt: Return,
