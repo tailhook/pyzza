@@ -257,6 +257,7 @@ class Loops(Test):
         self.testRange5()
         self.testRange6()
         self.testWhile()
+        self.testNested()
         self.testObjectIter()
 
     def testRange1(self):
@@ -350,6 +351,13 @@ class Loops(Test):
             i = 201
         self.assertEquals(i, 122)
         self.assertEquals(j, 26)
+
+    def testNested(self):
+        val = []
+        for i in range(10):
+            for j in range(5):
+                val.push(i+j)
+        self.assertEquals(val.length, 50)
 
     def testObjectIter(self):
         ob = {

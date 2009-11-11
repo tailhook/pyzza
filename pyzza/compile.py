@@ -1,6 +1,6 @@
 from itertools import chain, count
 from operator import methodcaller, attrgetter
-from collections import Counter
+from collections import Counter, defaultdict
 from contextlib import contextmanager
 import copy
 
@@ -445,7 +445,9 @@ class CodeFragment:
                 raise NotImplementedError(mode)
 
         self.loopstack = [] # pairs of continue label and break label
-        self.extra_registers = [] # extra registers used for computations
+        # extra registers used for computations
+        # keyed by register type
+        self.extra_registers = defaultdict(list)
         self.exceptions = []
         self.mode = mode
         self.parent_namespaces = parent_namespaces
@@ -492,6 +494,11 @@ class CodeFragment:
                     else:
                         rval = rname.value
                     setattr(bcode, name, bytecode.Register(rval))
+        bcodes = []
+        for (k, v) in self.namespace.items():
+            if isinstance(v, Register) and v in regs:
+                bcodes.append(bytecode.debug(1, k, regs[v], 0))
+        self.bytecodes[2:2] = bcodes
 
     def verify_stack(self):
         stack_size = 0
@@ -558,22 +565,23 @@ class CodeFragment:
     def qpriv(self, name):
         return abc.QName(abc.NSPrivate(self.filename), name)
 
-    def get_extra_reg(self):
+    def get_extra_reg(self, type):
         try:
-            return self.extra_registers.pop()
+            return self.extra_registers[type].pop()
         except IndexError:
             return Register()
 
-    def free_extra_reg(self, reg):
-        self.extra_registers.append(reg)
+    def free_extra_reg(self, reg, type):
+        self.bytecodes.append(bytecode.kill(reg))
+        self.extra_registers[type].append(reg)
 
     @contextmanager
-    def extra_reg(self):
-        reg = self.get_extra_reg()
+    def extra_reg(self, type):
+        reg = self.get_extra_reg(type)
         try:
             yield reg
         finally:
-            self.free_extra_reg(reg)
+            self.free_extra_reg(reg, type)
 
     ##### Visitors #####
 
@@ -1001,137 +1009,15 @@ class CodeFragment:
 
     def visit_for(self, node, void):
         assert void == True
-        endlabel = bytecode.Label()
-        elselabel = bytecode.Label()
         if isinstance(node.expr, parser.Call) \
             and isinstance(node.expr.expr, parser.Name):
             val = self.find_name(node.expr.expr.value)
             if isinstance(val, Builtin):
-                if val.name == 'range':
-                    if len(node.expr.arguments) < 2:
-                        start = parser.Number('0', ('',(node.expr.lineno,
-                            node.expr.col)))
-                        step = 1
-                        stop = node.expr.arguments[0]
-                    else:
-                        start = node.expr.arguments[0]
-                        stop = node.expr.arguments[1]
-                        if len(node.expr.arguments) > 2:
-                            assert len(node.expr.arguments) == 3, node.expr
-                            step = node.expr.arguments[2]
-                            if isinstance(step, parser.Number)\
-                                and step.value == 1:
-                                step = 1
-                        else:
-                            step = 1
-                    assert len(node.var) == 1, node.var
-                    stepreg = Register()
-                    iterreg = Register()
-                    stopreg = Register()
-                    bodylab = bytecode.label()
-                    contlab = bytecode.Label()
-                    condlab = bytecode.Label()
-                    self.push_value(start)
-                    self.bytecodes.append(bytecode.convert_i())
-                    self.bytecodes.append(bytecode.setlocal(iterreg))
-                    self.push_value(stop)
-                    self.bytecodes.append(bytecode.convert_i())
-                    self.bytecodes.append(bytecode.setlocal(stopreg))
-                    if step != 1:
-                        self.push_value(step)
-                        self.bytecodes.append(bytecode.convert_i())
-                        self.bytecodes.append(bytecode.setlocal(stepreg))
-                    self.bytecodes.append(bytecode.jump(condlab))
-                    self.bytecodes.append(bodylab)
-                    with self.assign(node.var[0]):
-                        self.bytecodes.append(bytecode.getlocal(iterreg))
-                    self.loopstack.append((contlab, endlabel))
-                    self.exec_suite(node.body)
-                    self.loopstack.pop()
-                    self.bytecodes.append(contlab)
-                    self.bytecodes.append(bytecode.debugline(node.lineno))
-                    if step == 1:
-                        self.bytecodes.append(bytecode.inclocal_i(iterreg))
-                    else:
-                        self.bytecodes.append(bytecode.getlocal(iterreg))
-                        self.bytecodes.append(bytecode.getlocal(stepreg))
-                        self.bytecodes.append(bytecode.add_i())
-                        self.bytecodes.append(bytecode.setlocal(iterreg))
-                    self.bytecodes.append(condlab)
-                    self.bytecodes.append(bytecode.debugline(node.lineno))
-                    if step == 1 or isinstance(step, parser.Number):
-                        self.bytecodes.append(bytecode.getlocal(iterreg))
-                        self.bytecodes.append(bytecode.getlocal(stopreg))
-                        if step == 1 or step.value > 0:
-                            self.bytecodes.append(bytecode.iflt(bodylab))
-                        elif step.value < 0:
-                            self.bytecodes.append(bytecode.ifgt(bodylab))
-                        else:
-                            raise NotImplementedError('Zero range step value')
-                    else:
-                        neglab = bytecode.Label()
-                        self.bytecodes.append(bytecode.pushbyte(0))
-                        self.bytecodes.append(bytecode.getlocal(stepreg))
-                        self.bytecodes.append(bytecode.ifgt(neglab))
-                        self.bytecodes.append(bytecode.getlocal(iterreg))
-                        self.bytecodes.append(bytecode.getlocal(stopreg))
-                        self.bytecodes.append(bytecode.iflt(bodylab))
-                        self.bytecodes.append(bytecode.jump(elselabel))
-                        self.bytecodes.append(neglab)
-                        self.bytecodes.append(bytecode.getlocal(iterreg))
-                        self.bytecodes.append(bytecode.getlocal(stopreg))
-                        self.bytecodes.append(bytecode.ifgt(bodylab))
-                elif val.name in ('keys', 'items', 'values'):
-                    assert len(node.expr.arguments) == 1, node.expr
-                    obj = Register()
-                    idx = Register()
-                    contlabel = bytecode.Label()
-                    bodylabel = bytecode.label()
-                    self.push_value(node.expr.arguments[0])
-                    self.bytecodes.append(bytecode.coerce_a())
-                    self.bytecodes.append(bytecode.setlocal(obj))
-                    self.bytecodes.append(bytecode.pushbyte(0))
-                    self.bytecodes.append(bytecode.setlocal(idx))
-                    self.bytecodes.append(bytecode.jump(contlabel))
-                    self.bytecodes.append(bodylabel)
-                    if val.name == 'keys':
-                        var = node.var[0] if len(node.var) == 1 else node.var
-                        with self.assign(var):
-                            self.bytecodes.append(bytecode.getlocal(obj))
-                            self.bytecodes.append(bytecode.getlocal(idx))
-                            self.bytecodes.append(bytecode.nextname())
-                    elif val.name == 'values':
-                        var = node.var[0] if len(node.var) == 1 else node.var
-                        with self.assign(var):
-                            self.bytecodes.append(bytecode.getlocal(obj))
-                            self.bytecodes.append(bytecode.getlocal(idx))
-                            self.bytecodes.append(bytecode.nextvalue())
-                    elif val.name == 'items':
-                        assert len(node.var) == 2
-                        with self.assign(node.var[0]):
-                            self.bytecodes.append(bytecode.getlocal(obj))
-                            self.bytecodes.append(bytecode.getlocal(idx))
-                            self.bytecodes.append(bytecode.nextname())
-                        with self.assign(node.var[1]):
-                            self.bytecodes.append(bytecode.getlocal(obj))
-                            self.bytecodes.append(bytecode.getlocal(idx))
-                            self.bytecodes.append(bytecode.nextvalue())
-                    self.loopstack.append((contlabel, endlabel))
-                    self.exec_suite(node.body)
-                    self.loopstack.pop()
-                    self.bytecodes.append(contlabel)
-                    self.bytecodes.append(bytecode.hasnext2(obj, idx))
-                    self.bytecodes.append(bytecode.iftrue(bodylabel))
-                else:
-                    raise NotImplementedError(val.name)
+                getattr(self, 'loop_' + val.name)(node)
             else:
                 raise NotImplementedError(node.expr.expr)
         else:
             raise NotImplementedError(node.expr)
-        self.bytecodes.append(elselabel)
-        if node.else_:
-            self.exec_suite(node.else_)
-        self.bytecodes.append(endlabel)
 
     def visit_while(self, node, void):
         assert void == True
@@ -1323,7 +1209,7 @@ class CodeFragment:
         self.push_value(node.arguments[0])
         self.bytecodes.append(bytecode.coerce_a())
         self.bytecodes.append(bytecode.dup())
-        with self.extra_reg() as reg:
+        with self.extra_reg('*') as reg:
             self.push_value(node.arguments[1])
             self.bytecodes.append(bytecode.dup())
             self.bytecodes.append(bytecode.coerce_a())
@@ -1339,7 +1225,7 @@ class CodeFragment:
         self.push_value(node.arguments[0])
         self.bytecodes.append(bytecode.coerce_a())
         self.bytecodes.append(bytecode.dup())
-        with self.extra_reg() as reg:
+        with self.extra_reg('*') as reg:
             self.push_value(node.arguments[1])
             self.bytecodes.append(bytecode.dup())
             self.bytecodes.append(bytecode.coerce_a())
@@ -1348,6 +1234,146 @@ class CodeFragment:
             self.bytecodes.append(bytecode.pop())
             self.bytecodes.append(bytecode.getlocal(reg))
         self.bytecodes.append(endlabel)
+
+    ##### Built-in iterators #####
+
+    def loop_objectiter(self, node, fun):
+        endlabel = bytecode.Label()
+        elselabel = bytecode.Label()
+        assert len(node.expr.arguments) == 1, node.expr
+        with self.extra_reg('*') as obj, \
+             self.extra_reg('int') as idx:
+            contlabel = bytecode.Label()
+            bodylabel = bytecode.label()
+            self.push_value(node.expr.arguments[0])
+            self.bytecodes.append(bytecode.coerce_a())
+            self.bytecodes.append(bytecode.setlocal(obj))
+            self.bytecodes.append(bytecode.pushbyte(0))
+            self.bytecodes.append(bytecode.setlocal(idx))
+            self.bytecodes.append(bytecode.jump(contlabel))
+            self.bytecodes.append(bodylabel)
+            if fun == 'keys':
+                var = node.var[0] if len(node.var) == 1 else node.var
+                with self.assign(var):
+                    self.bytecodes.append(bytecode.getlocal(obj))
+                    self.bytecodes.append(bytecode.getlocal(idx))
+                    self.bytecodes.append(bytecode.nextname())
+            elif fun == 'values':
+                var = node.var[0] if len(node.var) == 1 else node.var
+                with self.assign(var):
+                    self.bytecodes.append(bytecode.getlocal(obj))
+                    self.bytecodes.append(bytecode.getlocal(idx))
+                    self.bytecodes.append(bytecode.nextvalue())
+            elif fun == 'items':
+                assert len(node.var) == 2
+                with self.assign(node.var[0]):
+                    self.bytecodes.append(bytecode.getlocal(obj))
+                    self.bytecodes.append(bytecode.getlocal(idx))
+                    self.bytecodes.append(bytecode.nextname())
+                with self.assign(node.var[1]):
+                    self.bytecodes.append(bytecode.getlocal(obj))
+                    self.bytecodes.append(bytecode.getlocal(idx))
+                    self.bytecodes.append(bytecode.nextvalue())
+            self.loopstack.append((contlabel, endlabel))
+            self.exec_suite(node.body)
+            self.loopstack.pop()
+            self.bytecodes.append(contlabel)
+            self.bytecodes.append(bytecode.hasnext2(obj, idx))
+            self.bytecodes.append(bytecode.iftrue(bodylabel))
+            self.bytecodes.append(elselabel)
+            if node.else_:
+                self.exec_suite(node.else_)
+            self.bytecodes.append(endlabel)
+
+    def loop_keys(self, node, **kw):
+        self.loop_objectiter(node, 'keys', **kw)
+
+    def loop_values(self, node, **kw):
+        self.loop_objectiter(node, 'values', **kw)
+
+    def loop_items(self, node, **kw):
+        self.loop_objectiter(node, 'items', **kw)
+
+    def loop_range(self, node):
+        endlabel = bytecode.Label()
+        elselabel = bytecode.Label()
+        if len(node.expr.arguments) < 2:
+            start = parser.Number('0', ('',(node.expr.lineno,
+                node.expr.col)))
+            step = 1
+            stop = node.expr.arguments[0]
+        else:
+            start = node.expr.arguments[0]
+            stop = node.expr.arguments[1]
+            if len(node.expr.arguments) > 2:
+                assert len(node.expr.arguments) == 3, node.expr
+                step = node.expr.arguments[2]
+                if isinstance(step, parser.Number)\
+                    and step.value == 1:
+                    step = 1
+            else:
+                step = 1
+        assert len(node.var) == 1, node.var
+        with self.extra_reg('int') as stepreg, \
+             self.extra_reg('int') as iterreg, \
+             self.extra_reg('int') as stopreg:
+            bodylab = bytecode.label()
+            contlab = bytecode.Label()
+            condlab = bytecode.Label()
+            self.push_value(start)
+            self.bytecodes.append(bytecode.convert_i())
+            self.bytecodes.append(bytecode.setlocal(iterreg))
+            self.push_value(stop)
+            self.bytecodes.append(bytecode.convert_i())
+            self.bytecodes.append(bytecode.setlocal(stopreg))
+            if step != 1:
+                self.push_value(step)
+                self.bytecodes.append(bytecode.convert_i())
+                self.bytecodes.append(bytecode.setlocal(stepreg))
+            self.bytecodes.append(bytecode.jump(condlab))
+            self.bytecodes.append(bodylab)
+            with self.assign(node.var[0]):
+                self.bytecodes.append(bytecode.getlocal(iterreg))
+            self.loopstack.append((contlab, endlabel))
+            self.exec_suite(node.body)
+            self.loopstack.pop()
+            self.bytecodes.append(contlab)
+            self.bytecodes.append(bytecode.debugline(node.lineno))
+            if step == 1:
+                self.bytecodes.append(bytecode.inclocal_i(iterreg))
+            else:
+                self.bytecodes.append(bytecode.getlocal(iterreg))
+                self.bytecodes.append(bytecode.getlocal(stepreg))
+                self.bytecodes.append(bytecode.add_i())
+                self.bytecodes.append(bytecode.setlocal(iterreg))
+            self.bytecodes.append(condlab)
+            self.bytecodes.append(bytecode.debugline(node.lineno))
+            if step == 1 or isinstance(step, parser.Number):
+                self.bytecodes.append(bytecode.getlocal(iterreg))
+                self.bytecodes.append(bytecode.getlocal(stopreg))
+                if step == 1 or step.value > 0:
+                    self.bytecodes.append(bytecode.iflt(bodylab))
+                elif step.value < 0:
+                    self.bytecodes.append(bytecode.ifgt(bodylab))
+                else:
+                    raise NotImplementedError('Zero range step value')
+            else:
+                neglab = bytecode.Label()
+                self.bytecodes.append(bytecode.pushbyte(0))
+                self.bytecodes.append(bytecode.getlocal(stepreg))
+                self.bytecodes.append(bytecode.ifgt(neglab))
+                self.bytecodes.append(bytecode.getlocal(iterreg))
+                self.bytecodes.append(bytecode.getlocal(stopreg))
+                self.bytecodes.append(bytecode.iflt(bodylab))
+                self.bytecodes.append(bytecode.jump(elselabel))
+                self.bytecodes.append(neglab)
+                self.bytecodes.append(bytecode.getlocal(iterreg))
+                self.bytecodes.append(bytecode.getlocal(stopreg))
+                self.bytecodes.append(bytecode.ifgt(bodylab))
+            self.bytecodes.append(elselabel)
+            if node.else_:
+                self.exec_suite(node.else_)
+            self.bytecodes.append(endlabel)
 
 def get_options():
     import optparse
