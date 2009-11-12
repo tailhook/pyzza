@@ -267,6 +267,7 @@ class Loops(Test):
         self.testWhile()
         self.testNested()
         self.testObjectIter()
+        self.mutable_iter()
 
     def testRange1(self):
         j = 1.1
@@ -435,6 +436,15 @@ class Loops(Test):
             self.assertEquals(a*b, 24)
             self.assertEquals(a%b, v)
         self.assertEquals(j, 3)
+
+    def mutable_iter(self):
+        lst = [10, 20, 30]
+        j = 0
+        for v in values(lst):
+            if v > 1:
+                lst.push(v/2)
+            j += 1
+        self.assertEquals(j, 17)
 
 class Exceptions(Test):
     def __init__(self, reporter, name):
