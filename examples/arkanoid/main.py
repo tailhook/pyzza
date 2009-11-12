@@ -25,8 +25,10 @@ class Ball(Sprite):
         self.speed_y = 0
 
     def frame(self, delta):
-        self.pos_x += self.speed_x*delta
-        self.pos_y += self.speed_y*delta
+        sx = self.speed_x*delta
+        sy = self.speed_y*delta
+        self.pos_x += sx
+        self.pos_y += sy
         if self.pos_x < 0:
             self.pos_x = -self.pos_x
             self.speed_x = -self.speed_x
@@ -53,15 +55,31 @@ class Racket(Sprite):
         self.pos = 0.5
         self.x = Math.round((field.TOTALWIDTH - self.racket_width)*self.pos)
         self.y = field.TOTALHEIGHT - field.BRICKHEIGHT - field.PADDING
-        self.graphics.beginFill(0x0000FF)
+        m = Matrix()
+        m.createGradientBox(self.racket_width, field.BRICKHEIGHT,
+            0, -self.racket_width/4, -field.BRICKHEIGHT/4)
+        self.graphics.beginGradientFill(GradientType.RADIAL,
+            [0xFFFFFF, 0x808080], #colors
+            [1.0, 1.0], #alphas
+            [0, 255], #ratios
+            m, # transform matrix
+            SpreadMethod.PAD)
         self.graphics.drawRoundRect(0, 0, self.racket_width,
-            field.BRICKHEIGHT, field.ROUND)
+            field.BRICKHEIGHT, field.BRICKHEIGHT, field.BRICKHEIGHT)
         self.graphics.endFill()
-        self.graphics.beginFill(0xB0B0B0)
+        m.createGradientBox(self.racket_width*3, field.BRICKHEIGHT*3,
+            0, -self.racket_width/4, -field.BRICKHEIGHT/4)
+        self.graphics.beginGradientFill(GradientType.RADIAL,
+            [0xFFFFFF, 0x808080], #colors
+            [1.0, 1.0], #alphas
+            [0, 255], #ratios
+            m, # transform matrix
+            SpreadMethod.PAD)
         self.graphics.drawRoundRect(field.LINEWIDTH, field.LINEWIDTH,
             self.racket_width - field.LINEWIDTH*2,
             field.BRICKHEIGHT - field.LINEWIDTH*2,
-            field.ROUND - field.LINEWIDTH)
+            field.BRICKHEIGHT - field.LINEWIDTH,
+            field.BRICKHEIGHT - field.LINEWIDTH)
         self.graphics.endFill()
         self.cacheAsBitmap = True
 
@@ -244,12 +262,6 @@ class Field(Sprite):
         by = (self.ball.y - self.PADDING)
         bay = Math.floor((by - self.BALLRADIUS) / self.BRICKHEIGHT)
         bby = Math.floor((by + self.BALLRADIUS) / self.BRICKHEIGHT)
-        self.label.text = [
-                bax + ',' + bay,
-                bax + ',' + bby,
-                bbx + ',' + bay,
-                bby + ',' + bby,
-                ].join(', ')
         for bkey in values([
                 bax + ',' + bay,
                 bax + ',' + bby,
