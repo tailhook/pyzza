@@ -1,4 +1,4 @@
-from flash.display import Sprite
+from flash.display import DisplayObject, Sprite
 from flash.text import TextField
 from flash.text import TextFormat
 from flash.display import StageAlign
@@ -64,6 +64,7 @@ class Data(Test):
         self.testMakeDict()
         self.testUnpack()
         self.testInt()
+        self.testType()
 
     def testConst(self):
         self.assertEquals(CONST1, 11)
@@ -131,6 +132,18 @@ class Data(Test):
         self.assertEquals(c.val, "three")
         self.assertEquals(b.val, "two")
         self.assertEquals(a.val, "one")
+
+    def testType(self):
+        self.assertTrue(isinstance("abc", String))
+        s = String
+        self.assertTrue(isinstance("abc", s))
+        self.assertTrue(isinstance([], Array))
+        self.assertTrue(isinstance([1, 2], Array))
+        self.assertTrue(isinstance({}, Object))
+        self.assertTrue(isinstance(Dictionary(), Dictionary))
+        spr = Sprite()
+        self.assertTrue(isinstance(spr, Sprite))
+        self.assertTrue(isinstance(spr, DisplayObject))
 
 class TestMath(Test):
     def __init__(self, reporter, name):
@@ -775,9 +788,9 @@ class Main(Sprite):
 
     def __init__(self):
         super().__init__()
-        self.init('world')
+        self.init()
 
-    def init(self, value):
+    def init(self):
         self.stage.align = StageAlign.TOP_LEFT
         label = TextField()
         label.background = True

@@ -223,6 +223,7 @@ globals = {
     'min': Builtin('min'),
     'max': Builtin('max'),
     'len': Builtin('len'),
+    'isinstance': Builtin('isinstance'),
     }
 
 class Globals:
@@ -1238,6 +1239,21 @@ class CodeFragment:
             self.bytecodes.append(bytecode.getlocal(reg))
         self.bytecodes.append(endlabel)
 
+    def call_isinstance(self, node, void):
+        # The following commented out code leads to segfault
+        # at least on flashplayer 9.0.115.0 for linux
+        # ... sorry
+        #~ if isinstance(node.arguments[1], parser.Name):
+            #~ name = self.find_name(node.arguments[1].value)
+            #~ if isinstance(name, (Class, NewClass)):
+                #~ self.push_value(node.arguments[0])
+                #~ print(name.name)
+                #~ self.bytecodes.append(bytecode.istype(name.name))
+                #~ return
+        self.push_value(node.arguments[0])
+        self.push_value(node.arguments[1])
+        self.bytecodes.append(bytecode.istypelate())
+
     ##### Built-in iterators #####
 
     def loop_objectiter(self, node, fun):
@@ -1419,6 +1435,8 @@ def main():
         globals['Math'] = Class(lib.get_class('', 'Math'))
         globals['String'] = Class(lib.get_class('', 'String'))
         globals['Number'] = Class(lib.get_class('', 'Number'))
+        globals['Array'] = Class(lib.get_class('', 'Array'))
+        globals['Object'] = Class(lib.get_class('', 'Object'))
         globals['Error'] = Class(lib.get_class('', 'Error'))
         globals['TypeError'] = Class(lib.get_class('', 'TypeError'))
         globals['ArgumentError'] = Class(lib.get_class('', 'ArgumentError'))
