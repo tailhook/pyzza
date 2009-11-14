@@ -4,7 +4,7 @@ from io import BytesIO
 from math import log, ceil
 from operator import methodcaller
 
-from . import bitstream, tags
+from . import io, tags
 
 class Rect(object):
     x_min = None
@@ -69,7 +69,7 @@ class Header(object):
 
     @classmethod
     def read(cls, file):
-        stream = bitstream.BitStream(file)
+        stream = io.BitStream(file)
         self = cls()
         sig = stream.readbytes(3).bytes
         if sig == b'FWS':
@@ -85,7 +85,7 @@ class Header(object):
             assert len(buf)+8 == self.file_length,\
                 '{0} {1}'.format(len(buf), self.file_length)
             self.file = BytesIO(buf)
-            stream = bitstream.BitStream(self.file)
+            stream = io.BitStream(self.file)
         else:
             self.file = file
         self.frame_size = Rect.read(stream)

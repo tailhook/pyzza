@@ -1,4 +1,4 @@
-from . import bitstream
+from . import io
 
 TAG_ShowFrame = 1
 TAG_PlaceObject = 4
@@ -149,7 +149,7 @@ for v in list(globals().values()):
 del v
 
 def read(file):
-    stream = bitstream.BitStream(file)
+    stream = io.BitStream(file)
     mark = stream.readbytes(2).int_le
     code = mark >> 6
     if code in tag_classes:
