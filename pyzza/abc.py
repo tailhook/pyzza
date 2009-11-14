@@ -1,7 +1,7 @@
 import struct
 import copy
 from operator import itemgetter
-from collections import defaultdict, Counter
+from collections import defaultdict
 
 from .tags import Tag, TAG_DoABC
 from .io import DummyABCStream, ABCStream, uint
@@ -23,7 +23,7 @@ class Undefined(object):
 class ABCStruct(object):
     def __pretty__(self, p, cycle):
         if cycle:
-            return '{}(...)'.format(self.__class__.__name__)
+            return '{0}(...)'.format(self.__class__.__name__)
         else:
             with p.group(4, self.__class__.__name__ + '(', ')'):
                 for (idx, (k, v)) in enumerate(self.__dict__.items()):
@@ -131,7 +131,7 @@ class NamespaceInfo(ABCStruct):
     def read(cls, stream, index):
         kind = stream.read_u8()
         ni = stream.read_u30()
-        assert kind in namespace_kinds, "Wrong kind {}".format(kind)
+        assert kind in namespace_kinds, "Wrong kind {0}".format(kind)
         name = index.get_string(ni)
         self = namespace_kinds[kind](name)
         assert self.kind == kind
@@ -142,7 +142,7 @@ class NamespaceInfo(ABCStruct):
         stream.write_u30(index.get_string_index(self.name))
 
     def __repr__(self):
-        return '<{:s} {:s}>'.format(self.__class__.__name__, self.name)
+        return '<{0:s} {1:s}>'.format(self.__class__.__name__, self.name)
 
     def __eq__(self, other):
         return self.kind == other.kind and self.name == other.name
@@ -196,7 +196,7 @@ class NamespaceSetInfo(ABCStruct):
             stream.write_u30(index.get_namespace_index(n))
 
     def __repr__(self):
-        return '<NS {}>'.format(','.join(map(repr, self.ns)))
+        return '<NS {0}>'.format(','.join(map(repr, self.ns)))
 
 class AnyType(object):
     __slots__ = ()
@@ -252,7 +252,7 @@ class MethodInfo(ABCStruct):
                 stream.write_u30(index.get_string_index(p))
 
     def __repr__(self):
-        return '<{} {!r} at {:x}>'.format(self.__class__.__name__,
+        return '<{0} {1!r} at {2:x}>'.format(self.__class__.__name__,
             self.name, id(self))
 
 CONSTANT_Int                = 0x03
@@ -288,7 +288,7 @@ class OptionDetail(ABCStruct):
         stream.write_u8(kind)
 
     def __repr__(self):
-        return '<{} {!r}>'.format(self.__class__.__name__, self.value)
+        return '<{0} {1!r}>'.format(self.__class__.__name__, self.value)
 
 class TraitSlot(ABCStruct):
     kind = 0
@@ -319,7 +319,7 @@ class TraitSlot(ABCStruct):
             stream.write_u30(0)
 
     def __repr__(self):
-        return '<{} {}:{}{}>'.format(self.__class__.__name__, self.slot_id,
+        return '<{0} {1}:{2}{3}>'.format(self.__class__.__name__, self.slot_id,
             self.type_name, '=' + repr(getattr(self, 'value'))
             if hasattr(self, 'value') else '')
 
@@ -394,7 +394,7 @@ class TraitsInfo(ABCStruct):
                 stream.write_u30(index.get_metadata_index(m))
 
     def __repr__(self):
-        return '<Trait {}:{} {}>'.format(self.name, self.kind, self.data)
+        return '<Trait {0}:{1} {2}>'.format(self.name, self.kind, self.data)
 
 class TraitMethod(ABCStruct):
     kind = 1
@@ -589,7 +589,7 @@ class QName(MultinameInfo):
             index.get_string(stream.read_u30()))
 
     def __repr__(self):
-        return '<{} {}:{}>'.format(self.__class__.__name__,
+        return '<{0} {1}:{2}>'.format(self.__class__.__name__,
             self.namespace, self.name)
 
     def write(self, stream, index):
@@ -614,7 +614,7 @@ class RTQName(MultinameInfo):
         self.name = index.get_string(stream.read_u30())
         return self
     def __repr__(self):
-        return '<{} {}>'.format(self.__class__.__name__, self.name)
+        return '<{0} {1}>'.format(self.__class__.__name__, self.name)
     def write(self, stream, index):
         stream.write_u8(self.kind)
         stream.write_u30(index.get_string_index(self.name))
@@ -641,7 +641,7 @@ class Multiname(MultinameInfo):
         self.namespace_set = index.get_namespace_set(stream.read_u30())
         return self
     def __repr__(self):
-        return '<{} {}:{}>'.format(self.__class__.__name__,
+        return '<{0} {1}:{2}>'.format(self.__class__.__name__,
             self.namespace_set, self.name)
     def write(self, stream, index):
         stream.write_u8(self.kind)
@@ -661,7 +661,7 @@ class MultinameL(MultinameInfo):
         return cls(index.get_namespace_set(stream.read_u30()))
 
     def __repr__(self):
-        return '<{} {}>'.format(self.__class__.__name__, self.namespace_set)
+        return '<{0} {1}>'.format(self.__class__.__name__, self.namespace_set)
 
     def write(self, stream, index):
         stream.write_u8(self.kind)
@@ -725,7 +725,7 @@ class InstanceInfo(ABCStruct):
             i.write(stream, index)
 
     def __repr__(self):
-        return '<InstanceInfo {}({})>'.format(self.name, self.super_name)
+        return '<InstanceInfo {0}({1})>'.format(self.name, self.super_name)
 
 class ClassInfo(ABCStruct):
 
@@ -746,7 +746,7 @@ class ClassInfo(ABCStruct):
             t.write(stream, index)
 
     def __repr__(self):
-        return '<Class {}({})>'.format(self.instance_info.name,
+        return '<Class {0}({1})>'.format(self.instance_info.name,
             self.instance_info.super_name)
 
 class Index(object):
@@ -766,7 +766,7 @@ class Index(object):
     def get_string_index(self, value):
         #~ if value == '':
             #~ return 0
-        assert isinstance(value, str), "Value {!r} is not string".format(value)
+        assert isinstance(value, str), "Value {0!r} is not string".format(value)
         return self.cpool.string.index(value)+1
 
     def get_integer(self, index):
@@ -854,10 +854,10 @@ class Index(object):
         elif kind == CONSTANT_Utf8:
             return self.get_string(val)
         elif kind == CONSTANT_True:
-            #~ assert not val, 'Value {} for CONSTANT_True'.format(val)
+            #~ assert not val, 'Value {0} for CONSTANT_True'.format(val)
             return True
         elif kind == CONSTANT_False:
-            #~ assert not val, 'Value {} for CONSTANT_False'.format(val)
+            #~ assert not val, 'Value {0} for CONSTANT_False'.format(val)
             return False
         elif kind == CONSTANT_Null:
             return None
@@ -900,33 +900,33 @@ class Index(object):
 class IndexCreator(object):
     def __init__(self, data):
         self.data = data
-        self.strings = Counter()
-        self.integers = Counter()
-        self.uintegers = Counter()
-        self.doubles = Counter()
-        self.multinames = Counter()
-        self.namespaces = Counter()
-        self.namespace_sets = Counter()
-        self.metadata = Counter()
+        self.strings = defaultdict(int)
+        self.integers = defaultdict(int)
+        self.uintegers = defaultdict(int)
+        self.doubles = defaultdict(int)
+        self.multinames = defaultdict(int)
+        self.namespaces = defaultdict(int)
+        self.namespace_sets = defaultdict(int)
+        self.metadata = defaultdict(int)
 
     def update(self, data):
         data.constant_pool.integer = list(map(itemgetter(0),
-            self.integers.most_common()))
+            sorted(self.integers.items(), key=itemgetter(1))))
         data.constant_pool.double = list(map(itemgetter(0),
-            self.doubles.most_common()))
+            sorted(self.doubles.items(), key=itemgetter(1))))
         data.constant_pool.string = list(map(itemgetter(0),
-            self.strings.most_common()))
+            sorted(self.strings.items(), key=itemgetter(1))))
         data.constant_pool.multiname_info = list(map(itemgetter(0),
-            self.multinames.most_common()))
+            sorted(self.multinames.items(), key=itemgetter(1))))
         data.constant_pool.namespace_info = list(map(itemgetter(0),
-            self.namespaces.most_common()))
+            sorted(self.namespaces.items(), key=itemgetter(1))))
         data.constant_pool.ns_set_info = list(map(itemgetter(0),
-            self.namespace_sets.most_common()))
+            sorted(self.namespace_sets.items(), key=itemgetter(1))))
         data.metadata_info = list(map(itemgetter(0),
-            self.metadata.most_common()))
+            sorted(self.metadata.items(), key=itemgetter(1))))
 
     def get_string_index(self, value):
-        assert isinstance(value, str), "Value {!r} is not string".format(value)
+        assert isinstance(value, str), "Value {0!r} is not string".format(value)
         self.strings[value] += 1
         return 0
 
@@ -1102,7 +1102,7 @@ class DoABC(Tag):
                 getattr(body.method, 'param_name', body.method.param_type))
             index = Index(self.real_body, body)
             for (off, code) in bytecode.parse(body.code, index):
-                print('    {:5d} {!s}'.format(off, code))
+                print('    {0:5d} {1!s}'.format(off, code))
 
     def empty(self):
         self.real_body = ABCFile()

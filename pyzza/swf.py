@@ -77,12 +77,13 @@ class Header(object):
         elif sig == b'CWS':
             self.compressed = True
         else:
-            raise ValueError("Wrong signature ``{}''".format(sig))
+            raise ValueError("Wrong signature ``{0}''".format(sig))
         self.version = stream.readbytes(1).int_le
         self.file_length = stream.readbytes(4).int_le
         if self.compressed:
             buf = zlib.decompress(file.read())
-            assert len(buf)+8 == self.file_length, '{} {}'.format(len(buf), self.file_length)
+            assert len(buf)+8 == self.file_length,\
+                '{0} {1}'.format(len(buf), self.file_length)
             self.file = BytesIO(buf)
             stream = bitstream.BitStream(self.file)
         else:

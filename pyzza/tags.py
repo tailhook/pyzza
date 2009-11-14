@@ -51,7 +51,7 @@ class Tag(object):
         self.data = stream.readbytes(self.length).bytes
 
     def __repr__(self):
-        return '<{} type:{} len:{}>'.format(self.__class__.__name__,
+        return '<{0} type:{1} len:{2}>'.format(self.__class__.__name__,
             self.code, self.length)
 
 class End(Tag):
@@ -89,7 +89,7 @@ class SymbolClass(Tag):
         return super().blob()
 
     def __repr__(self):
-        return '<{} {!r}>'.format(self.__class__.__name__, self.assoc)
+        return '<{0} {1!r}>'.format(self.__class__.__name__, self.assoc)
 
 class FileAttributes(Tag):
     code = TAG_FileAttributes

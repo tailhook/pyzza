@@ -29,7 +29,7 @@ class Node(object):
         return len(self.children)
     def __pretty__(self, p, cycle):
         if cycle:
-            return '{}(...)'.format(self.__class__.__name__)
+            return '{0}(...)'.format(self.__class__.__name__)
         else:
             with p.group(4, self.__class__.__name__+'(', ')'):
                 try:
@@ -58,7 +58,7 @@ class Leaf(Node):
         self.value = value
         super().__init__(context)
     def __repr__(self):
-        return '<{} {!r}>'.format(self.__class__.__name__, self.value)
+        return '<{0} {1!r}>'.format(self.__class__.__name__, self.value)
     def __pretty__(self, p, c):
         return p.text(repr(self))
 
@@ -94,7 +94,7 @@ class String(Leaf):
         return val.replace(r'\"', '"').replace(r"\'", "'")\
             .replace(r'\r', '\r').replace(r'\n', '\n')
     def __repr__(self):
-        return '<String {!r}>'.format(self.value)
+        return '<String {0!r}>'.format(self.value)
 
 class Number(Leaf):
     __slots__ = ()
@@ -108,7 +108,7 @@ class Number(Leaf):
         return val.replace(r'\"', '"').replace(r"\'", "'")\
             .replace(r'\r', '\r').replace(r'\n', '\n')
     def __repr__(self):
-        return '<String {!r}>'.format(self.value)
+        return '<String {0!r}>'.format(self.value)
 
 class DottedName(Leaf):
     __slots__ = ('parts',)
@@ -116,7 +116,7 @@ class DottedName(Leaf):
         self.parts = list(map(attrgetter('value'), children))
         super().__init__('.'.join(self.parts), context)
     def __repr__(self):
-        return '<Dotname {}>'.format('.'.join(self.parts))
+        return '<Dotname {0}>'.format('.'.join(self.parts))
 
 class Op(Leaf):
     __slots__ = ()

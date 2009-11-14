@@ -1,6 +1,6 @@
 from itertools import chain, count
-from operator import methodcaller, attrgetter
-from collections import Counter, defaultdict
+from operator import methodcaller, attrgetter, itemgetter
+from collections import defaultdict
 from contextlib import contextmanager
 import copy
 
@@ -159,7 +159,7 @@ class Property(NameType):
         return self.name
 
     def __repr__(self):
-        return '<{} {!r}>'.format(self.__class__.__name__, self.property_name)
+        return '<{0} {1!r}>'.format(self.__class__.__name__, self.property_name)
 
 class Class(Property):
     """Imported class"""
@@ -180,9 +180,9 @@ class Register(NameType):
 
     def __repr__(self):
         if self.value is not None:
-            return '<R{:d}>'.format(self.value)
+            return '<R{0:d}>'.format(self.value)
         else:
-            return '<R:{:x}>'.format(id(self))
+            return '<R:{0:x}>'.format(id(self))
 
 class Builtin(NameType):
     """Some built-in (for global namespace)"""
@@ -475,7 +475,7 @@ class CodeFragment:
     ##### Post-processing #####
 
     def fix_registers(self):
-        rcount = Counter()
+        rcount = defaultdict(int)
         for bcode in self.bytecodes:
             for (name, typ, _, _) in bcode.format:
                 if issubclass(typ, bytecode.Register):
@@ -486,7 +486,8 @@ class CodeFragment:
         argnum = len(self.arguments)
         if self.varargument:
             argnum += 1
-        for (idx, (name, freq)) in zip(count(argnum), rcount.most_common()):
+        for (idx, (name, freq)) in zip(count(argnum),
+            sorted(rcount.items(), key=itemgetter(1))):
             regs[name] = idx
         self.local_count = argnum + len(regs)
         for bcode in self.bytecodes:
@@ -510,11 +511,11 @@ class CodeFragment:
         for bcode in self.bytecodes:
             if stack_size < len(bcode.stack_before):
                 raise StackError("Not enought operands in the stack for "
-                    "{!r} (operands: {})".format(bcode, bcode.stack_before))
+                    "{0!r} (operands: {1})".format(bcode, bcode.stack_before))
             if isinstance(bcode, bytecode.Label):
                 if hasattr(bcode, '_verify_stack'):
                     if bcode._verify_stack != stack_size:
-                        raise StackError("Unbalanced stack at {!r}".format(bcode))
+                        raise StackError("Unbalanced stack at {0!r}".format(bcode))
                 else:
                     bcode._verify_stack = stack_size
             old_stack = stack_size
@@ -522,10 +523,10 @@ class CodeFragment:
             if isinstance(bcode, bytecode.JumpBytecode):
                 if hasattr(bcode.offset, '_verify_stack'):
                     if bcode.offset._verify_stack != stack_size:
-                        raise StackError("Unbalanced stack at {!r}".format(bcode))
+                        raise StackError("Unbalanced stack at {0!r}".format(bcode))
                 else:
                     bcode.offset._verify_stack = stack_size
-            #~ print('[{:3d} -{:2d}] {}'.format(old_stack, stack_size, bcode))
+            #~ print('[{0:3d} -{1:2d}] {2}'.format(old_stack, stack_size, bcode))
             if stack_size > max_stack_size:
                 max_stack_size = stack_size
         if stack_size != 0:
@@ -615,7 +616,7 @@ class CodeFragment:
                 elif i.name.value == 'private':
                     package = abc.NSPrivate(self.filename)
                 else:
-                    raise NotImplementedError("No decorator ``{}''"
+                    raise NotImplementedError("No decorator ``{0}''"
                         .format(i.name))
         frag = CodeFragment(node, self.library, self.code_header,
             mode="class_body",
@@ -660,7 +661,7 @@ class CodeFragment:
         if self.mode == 'class_body':
             if node.decorators:
                 for i in node.decorators:
-                    raise NotImplementedError("No decorator ``{}''"
+                    raise NotImplementedError("No decorator ``{0}''"
                         .format(i.name))
             frag = CodeFragment(node, self.library, self.code_header,
                 mode="method",
@@ -671,7 +672,7 @@ class CodeFragment:
                 )
             self.namespace[node.name.value] = Method(frag)
             self.code_header.add_method_body(
-                '{}/{}'.format(self.class_name.value, node.name.value),
+                '{0}/{1}'.format(self.class_name.value, node.name.value),
                 frag, node.arguments)
         else:
             package = abc.NSPrivate(self.filename)
@@ -682,7 +683,7 @@ class CodeFragment:
                     elif i.name.value == 'private':
                         package = abc.NSPrivate(self.filename)
                     else:
-                        raise NotImplementedError("No decorator ``{}''"
+                        raise NotImplementedError("No decorator ``{0}''"
                             .format(i.name))
             frag = CodeFragment(node, self.library, self.code_header,
                 mode="function",
@@ -693,7 +694,7 @@ class CodeFragment:
                 filename=self.filename,
                 )
             mbody = self.code_header.add_method_body(
-                '{}${:d}:{}'.format(self.filename,
+                '{0}${1:d}:{2}'.format(self.filename,
                 node.lineno, node.name.value),
                 frag, node.arguments)
             prop = self.namespace[node.name.value]
