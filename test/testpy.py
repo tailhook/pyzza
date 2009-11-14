@@ -735,6 +735,52 @@ class Functions(Test):
         self.assertEquals(prod(77), 77)
         self.assertEquals(prod(2, 3, 4), 24)
 
+def maprepr(value, i, j):
+    return repr(value)
+
+def repr(value):
+    if isinstance(value, String):
+        return '"'+value          \
+            .replace('\\', r'\\') \
+            .replace('"', r'\"')   \
+            .replace('\r', r'\r') \
+            .replace('\n', r'\n') \
+            .replace('\t', r'\t') \
+            +'"'
+    elif isinstance(value, Number):
+        return value.toString()
+    elif isinstance(value, Array):
+        return '[' + value.map(maprepr).join(', ') + ']'
+    elif isinstance(value, Object):
+        if value.__repr__:
+            return value.__repr__()
+        elif value.constructor != Object:
+            return '<Instance of ' + value.constructor.toString() + '>'
+        res = []
+        for k, v in items(value):
+            res.push(repr(k) + ': ' + repr(v))
+        return '{' + res.join(', ') + '}'
+
+
+class Utility(Test):
+    def __init__(self, reporter, name):
+        super().__init__(reporter, name)
+
+    def test(self):
+        self.testRepr()
+
+    def testRepr(self):
+        self.assertEquals(repr("test"), '"test"')
+        self.assertEquals(repr("""Hello
+World!"""), r'"Hello\nWorld!"')
+        self.assertEquals(repr([1, 2, 3, "val"]), '[1, 2, 3, "val"]')
+        v = repr({'a': 'b', 'c': 3})
+        self.assertTrue(v == '{"a": "b", "c": 3}' or v == '{"c": 3, "a": "b"}')
+        v = repr({'ar': [1,2], 'c': 3})
+        self.assertTrue(v == '{"ar": [1, 2], "c": 3}'
+            or v == '{"c": 3, "ar": [1, 2]}')
+        self.assertEquals(repr(Failure("test")), '<Instance of [class Failure]>')
+
 class Reporter:
     def __init__(self, textlabel):
         self.textlabel = textlabel
@@ -811,4 +857,5 @@ class Main(Sprite):
         Exceptions(self.reporter, 'Exceptions').run()
         TestClass(self.reporter, 'Classes').run()
         Functions(self.reporter, 'Functions').run()
+        Utility(self.reporter, 'Utility').run()
         self.reporter.finish()

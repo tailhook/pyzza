@@ -68,6 +68,11 @@ class Name(Leaf):
 class String(Leaf):
     __slots__ = ()
     def __init__(self, value, context):
+        if value.startswith('r'):
+            value = value[1:]
+            raw = True
+        else:
+            raw = False
         if value.startswith("'''"):
             assert value.endswith("'''")
             value = value[3:-3]
@@ -82,7 +87,8 @@ class String(Leaf):
             value = value[1:-1]
         else:
             raise NotImplementedError(value)
-        value = '\\'.join(map(self._rep,value.split(r'\\')))
+        if not raw:
+            value = '\\'.join(map(self._rep,value.split(r'\\')))
         super().__init__(value, context)
     def _rep(self, val):
         return val.replace(r'\"', '"').replace(r"\'", "'")\
