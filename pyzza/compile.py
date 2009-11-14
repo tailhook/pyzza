@@ -1433,6 +1433,7 @@ def main():
         lib.add_file(i)
     if options.std_globals:
         globals['Math'] = Class(lib.get_class('', 'Math'))
+        globals['RegExp'] = Class(lib.get_class('', 'RegExp'))
         globals['String'] = Class(lib.get_class('', 'String'))
         globals['Number'] = Class(lib.get_class('', 'Number'))
         globals['Array'] = Class(lib.get_class('', 'Array'))

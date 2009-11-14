@@ -761,6 +761,44 @@ def repr(value):
             res.push(repr(k) + ': ' + repr(v))
         return '{' + res.join(', ') + '}'
 
+single_re = RegExp(r"\{([^}!:]*)(![^:}]+)?(:[^}]+)?\}")
+numformat_re = RegExp(r"^:([^}][<>=^])?(#?)(\d*)(\.\d+)?([bcdeEfFgGoxX%]?)$")
+strformat_re = RegExp(r"^:([^}][<>=^])?(\d*)?(s?)$")
+number_re = RegExp(r"^-?\d+$")
+
+@package('')
+def format(pattern, *args):
+    index = [0]
+    def repl(str, field, convers, format, index, pattern):
+        if format:
+            pass
+        if number_re.test(number_re):
+            val = args[Number(field)]
+        else:
+            val = args[0][val]
+        if convers:
+            if convers == '!s':
+                val = String(val)
+            elif convers == '!r':
+                val = repr(val)
+            else:
+                raise Error("Wrong conversion " + repr(val))
+        if format:
+            val = val.__format__(format)
+        return val
+    return pattern.replace(single_re, repl)
+
+def number_format(self, fmt):
+    fmtparts = numformat_re.exec(format)
+    if not fmtparts:
+        raise Error("Wrong format specification " + repr(fmt))
+    _, align, pref, width, prec, fmt = fmtparts
+
+def string_format(self, fmt):
+    fmtparts = strformat_re.exec(format)
+    if not fmtparts:
+        raise Error("Wrong format specification " + repr(fmt))
+    _, align, width, _ = fmtparts
 
 class Utility(Test):
     def __init__(self, reporter, name):
