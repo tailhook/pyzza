@@ -41,7 +41,7 @@ class Rect(object):
         res |= self.y_min
         res <<= bitlen
         res |= self.y_max
-        bytelen = ceil((5 + bitlen*4)/8.)
+        bytelen = int(ceil((5 + bitlen*4)/8.))
         res <<= bytelen*8 - (bitlen*4 + 5)
         val = bytes(reversed([(res >> (i*8))&0xFF
             for i in range(bytelen)]))

@@ -99,16 +99,13 @@ class String(Leaf):
 class Number(Leaf):
     __slots__ = ()
     def __init__(self, value, context):
-        if '.' in value:
-            value = float(value)
-        else:
-            value = int(value, 0)
         super().__init__(value, context)
-    def _rep(self, val):
-        return val.replace(r'\"', '"').replace(r"\'", "'")\
-            .replace(r'\r', '\r').replace(r'\n', '\n')
+        if '.' in self.value:
+            self.value = float(self.value)
+        else:
+            self.value = int(self.value, 0)
     def __repr__(self):
-        return '<String {0!r}>'.format(self.value)
+        return '<Number {0!r}>'.format(self.value)
 
 class DottedName(Leaf):
     __slots__ = ('parts',)

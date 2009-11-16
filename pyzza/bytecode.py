@@ -66,11 +66,11 @@ class Bytecode(object, metaclass=BytecodeMeta):
             assert isinstance(val, typ), "Arg {0!r} for {1!s} is wrong: {2!r}"\
                 .format(name, self.__class__.__name__, val)
             if idx is not None:
-                val = getattr(index, 'get_{}_index'.format(idx))(val)
+                val = getattr(index, 'get_{0}_index'.format(idx))(val)
             val = stream.write_formatted(format, val)
 
     def __repr__(self):
-        return '<{}>'.format(str(self))
+        return '<{0}>'.format(str(self))
 
     def __str__(self):
         return self.__class__.__name__ + \

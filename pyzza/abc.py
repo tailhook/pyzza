@@ -124,7 +124,7 @@ CONSTANT_PrivateNs          = 0x05
 class NamespaceInfo(ABCStruct):
 
     def __init__(self, name=''):
-        assert isinstance(name, str)
+        assert isinstance(name, str), repr(name)
         self.name = name
 
     @classmethod
@@ -578,8 +578,8 @@ class QName(MultinameInfo):
     kind = CONSTANT_QName
 
     def __init__(self, namespace, name):
-        assert isinstance(namespace, NamespaceInfo), namespace
-        assert isinstance(name, str), name
+        assert isinstance(namespace, NamespaceInfo), repr(namespace)
+        assert isinstance(name, str), repr(name)
         self.namespace = namespace
         self.name = name
 
