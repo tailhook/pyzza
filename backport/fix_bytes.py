@@ -11,7 +11,7 @@ into:
 
 class FixBytes(fixer_base.BaseFix):
     PATTERN = """
-        power< name='bytes' trailer< '(' atom< '[' any ']' > ')' > >
+        power< name='bytes' trailer< '(' any ')' > >
     """
 
     def transform(self, node, results):
