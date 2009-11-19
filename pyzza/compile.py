@@ -1,4 +1,4 @@
-from itertools import chain, count
+from itertools import chain, count, islice
 from operator import methodcaller, attrgetter, itemgetter
 from collections import defaultdict
 from contextlib import contextmanager
@@ -6,7 +6,11 @@ import copy
 
 from . import parser, library, swf, bytecode, abc, tags
 
-class SyntaxError(Exception): pass
+class SyntaxError(Exception):
+    def __init__(self, message, **kwargs):
+        self.message = message
+        self.context = kwargs
+
 class NameError(SyntaxError): pass
 class VerificationError(Exception): pass
 class StackError(VerificationError): pass
@@ -556,12 +560,13 @@ class CodeFragment:
         for line in suite:
             self.execute(line)
 
-    def find_name(self, name):
+    def find_name(self, name, node):
         for ns in chain((self,), self.parent_namespaces):
             if name in ns.namespace:
                 break
         else:
-            raise NameError(name)
+            raise NameError(name, filename=self.filename,
+                lineno=node.lineno, column=node.col)
         return ns.namespace[name]
 
     def qname(self, name):
@@ -628,7 +633,7 @@ class CodeFragment:
         if not node.bases:
             val = self.library.get_class('', 'Object')
         else:
-            val = self.find_name(node.bases[0].value).class_info
+            val = self.find_name(node.bases[0].value, node.bases[0]).class_info
         bases = []
         while val:
             bases.append(val)
@@ -676,19 +681,22 @@ class CodeFragment:
                 frag, node.arguments)
         else:
             package = abc.NSPrivate(self.filename)
+            method = False
             if node.decorators:
                 for i in node.decorators:
                     if i.name.value == 'package':
                         package = abc.NSPackage(i.arguments[0].value)
                     elif i.name.value == 'private':
                         package = abc.NSPrivate(self.filename)
+                    elif i.name.value == 'method':
+                        method = True
                     else:
                         raise NotImplementedError("No decorator ``{0}''"
                             .format(i.name))
             frag = CodeFragment(node, self.library, self.code_header,
                 mode="function",
                 parent_namespaces=(self,) + self.parent_namespaces,
-                arguments=[None] + list(
+                arguments=([] if method else [None]) + list(
                     map(attrgetter('name.value'), args)),
                 varargument=vararg,
                 filename=self.filename,
@@ -847,7 +855,7 @@ class CodeFragment:
         name = node.expr
         if isinstance(name, parser.Name):
             name = name.value
-            val = self.find_name(name)
+            val = self.find_name(name, node.expr)
             if isinstance(val, (Class, NewClass)):
                 self.bytecodes.append(bytecode.getlex(val.property_name))
                 for i in node.arguments:
@@ -882,7 +890,8 @@ class CodeFragment:
             if name in ns.namespace:
                 break
         else:
-            raise NameError(name)
+            raise NameError(name, filename=self.filename,
+                lineno=node.lineno, column=node.col)
         val = ns.namespace[name]
         if isinstance(val, bool):
             if val:
@@ -1016,7 +1025,7 @@ class CodeFragment:
         assert void == True
         if isinstance(node.expr, parser.Call) \
             and isinstance(node.expr.expr, parser.Name):
-            val = self.find_name(node.expr.expr.value)
+            val = self.find_name(node.expr.expr.value, node.expr.expr)
             if isinstance(val, Builtin):
                 getattr(self, 'loop_' + val.name)(node)
             else:
@@ -1061,7 +1070,8 @@ class CodeFragment:
             excinfo.target = catchlabel
             variable = None
             if isinstance(exc, tuple):
-                excinfo.exc_type = self.find_name(exc[0].value).class_info.name
+                excinfo.exc_type = self.find_name(exc[0].value,
+                    exc[0]).class_info.name
                 if exc[1] is not None:
                     excinfo.var_name = self.qname(exc[1].value)
                     variable = exc[1]
@@ -1422,6 +1432,16 @@ def get_options():
         dest="frame_rate", default=15, type="int")
     return op
 
+def print_error(e):
+    print("{error.__class__.__name__} at line {lineno} column {column} "\
+        "of file {filename!r}:".format(error=e, **e.context))
+    with open(e.context['filename'], 'rt', encoding='utf-8') as f:
+        for (no, line) in islice(zip(count(1), f),
+            max(e.context['lineno']-5, 0), e.context['lineno']+4):
+            print('{0:4d}  {1}'.format(no, line.rstrip()))
+            if no == e.context['lineno']:
+                print(' ' * (e.context['column']+6) + '^')
+
 def main():
     global options
     op = get_options()
@@ -1436,22 +1456,30 @@ def main():
         globals['Math'] = Class(lib.get_class('', 'Math'))
         globals['RegExp'] = Class(lib.get_class('', 'RegExp'))
         globals['String'] = Class(lib.get_class('', 'String'))
+        globals['str'] = Class(lib.get_class('', 'String'))
         globals['Number'] = Class(lib.get_class('', 'Number'))
+        globals['float'] = Class(lib.get_class('', 'Number'))
         globals['Array'] = Class(lib.get_class('', 'Array'))
+        globals['list'] = Class(lib.get_class('', 'Array'))
         globals['Object'] = Class(lib.get_class('', 'Object'))
+        globals['Boolean'] = Class(lib.get_class('', 'Boolean'))
+        globals['bool'] = Class(lib.get_class('', 'Boolean'))
         globals['Error'] = Class(lib.get_class('', 'Error'))
         globals['TypeError'] = Class(lib.get_class('', 'TypeError'))
         globals['ArgumentError'] = Class(lib.get_class('', 'ArgumentError'))
         globals['ReferenceError'] = Class(lib.get_class('', 'ReferenceError'))
     code_tags = []
-    for file in args:
-        ast = parser.parser().parse_file(file)
-        code_header = CodeHeader(file)
-        NameCheck(ast) # fills closure variable names
-        frag = CodeFragment(ast, lib, code_header, filename=file)
-        code_header.add_method_body('', frag)
-        code_header.add_main_script(frag)
-        code_tags.append(code_header.make_tag())
+    try:
+        for file in args:
+            ast = parser.parser().parse_file(file)
+            code_header = CodeHeader(file)
+            NameCheck(ast) # fills closure variable names
+            frag = CodeFragment(ast, lib, code_header, filename=file)
+            code_header.add_method_body('', frag)
+            code_header.add_main_script(frag)
+            code_tags.append(code_header.make_tag())
+    except (parser.SyntaxError, SyntaxError) as e:
+        print_error(e)
     h = swf.Header(frame_size=(int(options.width*20), int(options.height*20)),
                    frame_rate=int(options.frame_rate*256))
     content = [tags.FileAttributes()] \

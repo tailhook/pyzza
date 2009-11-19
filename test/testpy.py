@@ -4,52 +4,8 @@ from flash.text import TextFormat
 from flash.display import StageAlign
 from flash.events import Event
 from flash.utils import Dictionary
-
-class Failure(Error):
-    def __init__(self, message):
-        super().__init__()
-        self.message = message
-
-class Test:
-    """Base class for all tests"""
-    def __init__(self, reporter, name):
-        self.name = name
-        self.reporter = reporter
-    def assertTrue(self, val):
-        self.reporter.add_assert()
-        if not val:
-            raise Failure("Assertion failed ``" + val + "'' is not True")
-    def assertFalse(self, val):
-        self.reporter.add_assert()
-        if val:
-            raise Failure("Assertion failed ``" + val + "'' is not False")
-    def assertEquals(self, a, b):
-        self.reporter.add_assert()
-        if a != b:
-            raise Failure("Assertion failed ``" + a + "'' != ``" + b + "''")
-    def assertFloatEquals(self, a, b):
-        self.reporter.add_assert()
-        if -0.001 < a - b < 0.001:
-            raise Failure("Assertion failed ``" + a + "'' != ``" + b + "''")
-    def assertNotEquals(self, a, b):
-        self.reporter.add_assert()
-        if a == b:
-            raise Failure("Assertion failed ``" + a + "'' == ``" + b + "''")
-    def assertFloatNotEquals(self, a, b):
-        self.reporter.add_assert()
-        dif = a-b
-        if dif > 0.001 or dif < -0.001:
-            raise Failure("Assertion failed ``" + a + "'' != ``" + b + "''")
-    def run(self):
-        self.reporter.start(self.name)
-        try:
-            self.test()
-        except Failure as f:
-            self.reporter.fail(f)
-        except Error as e:
-            self.reporter.error(e)
-        else:
-            self.reporter.ok()
+from unittest import Test, Failure, Reporter
+from string import repr, format
 
 CONST1 = 11
 CONST2 = 22
@@ -735,77 +691,13 @@ class Functions(Test):
         self.assertEquals(prod(77), 77)
         self.assertEquals(prod(2, 3, 4), 24)
 
-def maprepr(value, i, j):
-    return repr(value)
-
-def repr(value):
-    if isinstance(value, String):
-        return '"'+value          \
-            .replace('\\', r'\\') \
-            .replace('"', r'\"')   \
-            .replace('\r', r'\r') \
-            .replace('\n', r'\n') \
-            .replace('\t', r'\t') \
-            +'"'
-    elif isinstance(value, Number):
-        return value.toString()
-    elif isinstance(value, Array):
-        return '[' + value.map(maprepr).join(', ') + ']'
-    elif isinstance(value, Object):
-        if value.__repr__:
-            return value.__repr__()
-        elif value.constructor != Object:
-            return '<Instance of ' + value.constructor.toString() + '>'
-        res = []
-        for k, v in items(value):
-            res.push(repr(k) + ': ' + repr(v))
-        return '{' + res.join(', ') + '}'
-
-single_re = RegExp(r"\{([^}!:]*)(![^:}]+)?(:[^}]+)?\}")
-numformat_re = RegExp(r"^:([^}][<>=^])?(#?)(\d*)(\.\d+)?([bcdeEfFgGoxX%]?)$")
-strformat_re = RegExp(r"^:([^}][<>=^])?(\d*)?(s?)$")
-number_re = RegExp(r"^-?\d+$")
-
-@package('')
-def format(pattern, *args):
-    index = [0]
-    def repl(str, field, convers, format, index, pattern):
-        if format:
-            pass
-        if number_re.test(number_re):
-            val = args[Number(field)]
-        else:
-            val = args[0][val]
-        if convers:
-            if convers == '!s':
-                val = String(val)
-            elif convers == '!r':
-                val = repr(val)
-            else:
-                raise Error("Wrong conversion " + repr(val))
-        if format:
-            val = val.__format__(format)
-        return val
-    return pattern.replace(single_re, repl)
-
-def number_format(self, fmt):
-    fmtparts = numformat_re.exec(format)
-    if not fmtparts:
-        raise Error("Wrong format specification " + repr(fmt))
-    _, align, pref, width, prec, fmt = fmtparts
-
-def string_format(self, fmt):
-    fmtparts = strformat_re.exec(format)
-    if not fmtparts:
-        raise Error("Wrong format specification " + repr(fmt))
-    _, align, width, _ = fmtparts
-
 class Utility(Test):
     def __init__(self, reporter, name):
         super().__init__(reporter, name)
 
     def test(self):
         self.testRepr()
+        self.testFormat()
 
     def testRepr(self):
         self.assertEquals(repr("test"), '"test"')
@@ -819,53 +711,133 @@ World!"""), r'"Hello\nWorld!"')
             or v == '{"c": 3, "ar": [1, 2]}')
         self.assertEquals(repr(Failure("test")), '<Instance of [class Failure]>')
 
-class Reporter:
-    def __init__(self, textlabel):
-        self.textlabel = textlabel
-        self.number = 0
-        self.successful = 0
-        self.failed = 0
-        self.assertions = 0
-        self.at_start = False
+    def testFormat(self):
+        self.assertEquals(''.format(), '')
+        self.assertEquals('a'.format(), 'a')
+        self.assertEquals('ab'.format(), 'ab')
+        self.assertEquals('a{{'.format(), 'a{')
+        self.assertEquals('a}}'.format(), 'a}')
+        self.assertEquals('{{b'.format(), '{b')
+        self.assertEquals('}}b'.format(), '}b')
+        self.assertEquals('a{{b'.format(), 'a{b')
 
-    def start(self, name):
-        self.number += 1
-        self.at_start = True
-        self.textlabel.appendText(name + '... ')
+        # examples from the PEP:
+        self.assertEquals("My name is {0}".format('Fred'), "My name is Fred")
+        self.assertEquals("My name is {0.name}".format({'name': 'Fred'}),
+                         "My name is Fred")
+        self.assertEquals("My name is {0} :-{{}}".format('Fred'),
+                         "My name is Fred :-{}")
 
-    def ok(self):
-        if not self.at_start:
-            self.textlabel.appendText('... ')
-        self.textlabel.appendText('OK\n')
-        self.successful += 1
+        self.assertEquals(''.format(), '')
+        self.assertEquals('abc'.format(), 'abc')
+        self.assertEquals('{0}'.format('abc'), 'abc')
+        self.assertEquals('{0:}'.format('abc'), 'abc')
+#        self.assertEquals('{ 0 }'.format('abc'), 'abc')
+        self.assertEquals('X{0}'.format('abc'), 'Xabc')
+        self.assertEquals('{0}X'.format('abc'), 'abcX')
+        self.assertEquals('X{0}Y'.format('abc'), 'XabcY')
+        self.assertEquals('{1}'.format(1, 'abc'), 'abc')
+        self.assertEquals('X{1}'.format(1, 'abc'), 'Xabc')
+        self.assertEquals('{1}X'.format(1, 'abc'), 'abcX')
+        self.assertEquals('X{1}Y'.format(1, 'abc'), 'XabcY')
+        self.assertEquals('{0}'.format(-15), '-15')
+        self.assertEquals('{0}{1}'.format(-15, 'abc'), '-15abc')
+        self.assertEquals('{0}X{1}'.format(-15, 'abc'), '-15Xabc')
+        self.assertEquals('{{'.format(), '{')
+        self.assertEquals('}}'.format(), '}')
+        self.assertEquals('{{}}'.format(), '{}')
+        self.assertEquals('{{x}}'.format(), '{x}')
+        self.assertEquals('{{{0}}}'.format(123), '{123}')
+        self.assertEquals('{{{{0}}}}'.format(), '{{0}}')
+        self.assertEquals('}}{{'.format(), '}{')
+        self.assertEquals('}}x{{'.format(), '}x{')
 
-    def fail(self, failure):
-        if not self.at_start:
-            self.textlabel.appendText('... ')
-        self.debug(failure.getStackTrace())
-        self.textlabel.appendText('Fail: '+failure.message+'\n')
-        self.failed += 1
+        # weird field names
+        self.assertEquals("{0.foo-bar}".format({'foo-bar':'baz'}), 'baz')
+        self.assertEquals("{0.foo bar}".format({'foo bar':'baz'}), 'baz')
+        self.assertEquals("{0. }".format({' ':3}), '3')
 
-    def error(self, error):
-        if not self.at_start:
-            self.textlabel.appendText('... ')
-        self.textlabel.appendText('Error: '+error.getStackTrace()+'\n')
-        self.failed += 1
 
-    def add_assert(self):
-        self.assertions += 1
+        self.assertEquals('{0.0}'.format(['abc', 'def']), 'abc')
+        self.assertEquals('{0.1}'.format(['abc', 'def']), 'def')
+        self.assertEquals('{0.1.0}'.format(['abc', ['def']]), 'def')
 
-    def debug(self, val):
-        if self.at_start:
-            self.textlabel.appendText('\n')
-            self.at_start = False
-        self.textlabel.appendText('Debug: ' + val + '\n')
+        # strings
+        self.assertEquals('{0:.3s}'.format('abc'), 'abc')
+        self.assertEquals('{0:.3s}'.format('ab'), 'ab')
+        self.assertEquals('{0:.3s}'.format('abcdef'), 'abc')
+        self.assertEquals('{0:.0s}'.format('abcdef'), '')
+        self.assertEquals('{0:3.3s}'.format('abc'), 'abc')
+        self.assertEquals('{0:2.3s}'.format('abc'), 'abc')
+        self.assertEquals('{0:2.2s}'.format('abc'), 'ab')
+        self.assertEquals('{0:3.2s}'.format('abc'), 'ab ')
+        self.assertEquals('{0:x<0s}'.format('result'), 'result')
+        self.assertEquals('{0:x<5s}'.format('result'), 'result')
+        self.assertEquals('{0:x<6s}'.format('result'), 'result')
+        self.assertEquals('{0:x<7s}'.format('result'), 'resultx')
+        self.assertEquals('{0:x<8s}'.format('result'), 'resultxx')
+        self.assertEquals('{0: <7s}'.format('result'), 'result ')
+        self.assertEquals('{0:<7s}'.format('result'), 'result ')
+        self.assertEquals('{0:>7s}'.format('result'), ' result')
+        self.assertEquals('{0:>8s}'.format('result'), '  result')
+        self.assertEquals('{0:^8s}'.format('result'), ' result ')
+        self.assertEquals('{0:^9s}'.format('result'), ' result  ')
+        self.assertEquals('{0:^10s}'.format('result'), '  result  ')
+        self.assertEquals('{0:100}'.format('a'),
+            'a                                                 '
+            '                                                  ')
+        self.assertEquals('{0:100}'.format(''),
+            '                                                  '
+            '                                                  ')
 
-    def finish(self):
-        self.textlabel.appendText("Tests run: " + self.number
-            + ", successful: " + self.successful
-            + ", failures: " + self.failed
-            + ", assertions: " + self.assertions + "\n")
+        # !r, !s and !a coercions
+        self.assertEquals('{0!s}'.format('Hello'), 'Hello')
+        self.assertEquals('{0!s:}'.format('Hello'), 'Hello')
+        self.assertEquals('{0!s:15}'.format('Hello'), 'Hello          ')
+        self.assertEquals('{0!s:15s}'.format('Hello'), 'Hello          ')
+        self.assertEquals('{0!r}'.format('Hello'), '"Hello"')
+        self.assertEquals('{0!r:}'.format('Hello'), '"Hello"')
+
+        # test fallback to object.__format__
+        self.assertEquals('{0}'.format({}), '{}')
+        self.assertEquals('{0}'.format([]), '[]')
+        self.assertEquals('{0}'.format([1]), '[1]')
+
+        self.assertEquals('{:d}'.format(10), '10')
+        self.assertEquals('{:0=5d}'.format(10), '00010')
+        self.assertEquals('{: =5d}'.format(10), '   10')
+        self.assertEquals('{:>5d}'.format(10), '   10')
+        self.assertEquals('{:5d}'.format(10), '   10')
+        self.assertEquals('{:<5d}'.format(10), '10   ')
+        self.assertEquals('{:5d}'.format(100000), '100000')
+        self.assertEquals('{:0=5d}'.format(-10), '-0010')
+        self.assertEquals('{:>5d}'.format(-10), '  -10')
+        self.assertEquals('{:<5d}'.format(-10), '-10  ')
+        self.assertEquals('{:^5d}'.format(-10), ' -10 ')
+        self.assertEquals('{:x^5d}'.format(-10), 'x-10x')
+        self.assertEquals('{:x^5d}'.format(10), 'x10xx')
+        self.assertEquals('{:x^+5d}'.format(10), 'x+10x')
+        self.assertEquals('{:5d}'.format(-100000), '-100000')
+
+        self.assertEquals('{:f}'.format(10.2), '10.200000')
+        self.assertEquals('{:.2f}'.format(10.2), '10.20')
+        self.assertEquals('{:.2f}'.format(10.222), '10.22')
+        self.assertEquals('{:7.2f}'.format(10.222), '  10.22')
+        self.assertEquals('{:+8.2f}'.format(10.222), '  +10.22')
+        self.assertEquals('{:+8.2f}'.format(10.227), '  +10.23')
+
+        self.assertEquals('{:x}'.format(0x1a), '1a')
+        self.assertEquals('{:X}'.format(0x1a), '1A')
+        self.assertEquals('{:o}'.format(0o12), '12')
+        self.assertEquals('{:#o}'.format(0o12), '0o12')
+        self.assertEquals('{:b}'.format(0b10101011100), '10101011100')
+        self.assertEquals('{:#b}'.format(0b10101011100), '0b10101011100')
+        self.assertEquals('{:#x}'.format(18), '0x12')
+        self.assertEquals('{:>#5x}'.format(18), ' 0x12')
+        self.assertEquals('{:0=#5x}'.format(18), '0x012')
+        self.assertEquals('{:0=#5x}'.format(-18), '-0x12')
+        self.assertEquals('{:#6x}'.format(-18), ' -0x12')
+
 
 @package('')
 class Main(Sprite):

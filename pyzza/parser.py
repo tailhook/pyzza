@@ -1,10 +1,16 @@
 from lib2to3.pygram import driver
 from lib2to3 import pygram, pytree
 from lib2to3.pygram import token
+from lib2to3 import pgen2
 
 from operator import attrgetter
 
 from . import pretty
+
+class SyntaxError(Exception):
+    def __init__(self, message='', **kwarg):
+        self.message = message
+        self.context = kwarg
 
 class Symbol(object):
     def __init__(self, grammar):
@@ -767,8 +773,17 @@ def convert(gr, raw_node):
     except KeyError:
         raise NotImplementedError(token.tok_name[type])
 
+class Parser(driver.Driver):
+    def parse_file(self, filename):
+        try:
+            return super().parse_file(filename)
+        except pgen2.parse.ParseError as e:
+            _, (line, col) = e.context
+            raise SyntaxError(filename=filename, lineno=line, column=col)
+
+
 def parser():
-    driv = driver.Driver(grammar, convert=convert)
+    driv = Parser(grammar, convert=convert)
     return driv
 
 if __name__ == '__main__':
