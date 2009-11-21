@@ -246,6 +246,10 @@ globals = {
 
 class Globals:
     namespace = globals
+    def __init__(self):
+        self.namespace = self.namespace.copy()
+    def update(self, val):
+        self.namespace.update(val)
 
 class NameCheck:
     visitors = {
@@ -431,8 +435,8 @@ class CodeFragment:
     scope_stack_init = 0 # TODO: fix
     scope_stack_max = 10 # TODO: fix
     def __init__(self, ast, library, code_header,
+            parent_namespaces,
             mode="global",
-            parent_namespaces=(Globals(),),
             arguments=(None,),
             varargument=None,
             filename=None,
@@ -1468,6 +1472,43 @@ def print_error(e):
             if no == e.context['lineno']:
                 print(' ' * (e.context['column']+6) + '^')
 
+def make_globals(lib, std_globals=True):
+    glob = Globals()
+    for pack, name in lib.get_public_names():
+        if pack == '':
+            glob.namespace[name] = Class(lib.get_class(pack, name))
+    if std_globals:
+        glob.namespace['str'] = Class(lib.get_class('', 'String'))
+        glob.namespace['float'] = Class(lib.get_class('', 'Number'))
+        glob.namespace['list'] = Class(lib.get_class('', 'Array'))
+        glob.namespace['bool'] = Class(lib.get_class('', 'Boolean'))
+    return glob
+
+def compile(files, lib, glob, output, main_class,
+        width=500, height=375, frame_rate=15):
+    code_tags = []
+    try:
+        for file in files:
+            ast = parser.parser().parse_file(file)
+            code_header = CodeHeader(file)
+            NameCheck(ast) # fills closure variable names
+            frag = CodeFragment(ast, lib, code_header, filename=file,
+                parent_namespaces=(glob,))
+            code_header.add_method_body('', frag)
+            code_header.add_main_script(frag)
+            code_tags.append(code_header.make_tag())
+    except (parser.SyntaxError, SyntaxError) as e:
+        print_error(e)
+    h = swf.Header(frame_size=(int(width*20), int(height*20)),
+                   frame_rate=int(frame_rate*256))
+    content = [tags.FileAttributes()] \
+        + code_tags + [
+        tags.SymbolClass(main_class=main_class),
+        tags.ShowFrame(),
+        ]
+    with open(output, 'wb') as o:
+        h.write_swf(o, b''.join(map(methodcaller('blob'), content)))
+
 def main():
     global options
     op = get_options()
@@ -1478,44 +1519,6 @@ def main():
     lib = library.Library()
     for i in options.libraries:
         lib.add_file(i)
-    if options.std_globals:
-        globals['Math'] = Class(lib.get_class('', 'Math'))
-        globals['RegExp'] = Class(lib.get_class('', 'RegExp'))
-        globals['String'] = Class(lib.get_class('', 'String'))
-        globals['str'] = Class(lib.get_class('', 'String'))
-        globals['Number'] = Class(lib.get_class('', 'Number'))
-        globals['float'] = Class(lib.get_class('', 'Number'))
-        globals['Array'] = Class(lib.get_class('', 'Array'))
-        globals['list'] = Class(lib.get_class('', 'Array'))
-        globals['Object'] = Class(lib.get_class('', 'Object'))
-        globals['Boolean'] = Class(lib.get_class('', 'Boolean'))
-        globals['bool'] = Class(lib.get_class('', 'Boolean'))
-        globals['int'] = Class(lib.get_class('', 'int'))
-        globals['uint'] = Class(lib.get_class('', 'uint'))
-        globals['Error'] = Class(lib.get_class('', 'Error'))
-        globals['TypeError'] = Class(lib.get_class('', 'TypeError'))
-        globals['ArgumentError'] = Class(lib.get_class('', 'ArgumentError'))
-        globals['ReferenceError'] = Class(lib.get_class('', 'ReferenceError'))
-        globals['isNaN'] = Property(abc.QName(abc.NSPackage(''), 'isNaN'))
-    code_tags = []
-    try:
-        for file in args:
-            ast = parser.parser().parse_file(file)
-            code_header = CodeHeader(file)
-            NameCheck(ast) # fills closure variable names
-            frag = CodeFragment(ast, lib, code_header, filename=file)
-            code_header.add_method_body('', frag)
-            code_header.add_main_script(frag)
-            code_tags.append(code_header.make_tag())
-    except (parser.SyntaxError, SyntaxError) as e:
-        print_error(e)
-    h = swf.Header(frame_size=(int(options.width*20), int(options.height*20)),
-                   frame_rate=int(options.frame_rate*256))
-    content = [tags.FileAttributes()] \
-        + code_tags + [
-        tags.SymbolClass(main_class=options.main_class),
-        tags.ShowFrame(),
-        ]
     if options.output:
         out = options.output
     else:
@@ -1523,8 +1526,10 @@ def main():
             out = args[0][:-3] + '.swf'
         else:
             out = args[0] + '.swf'
-    with open(out, 'wb') as o:
-        h.write_swf(o, b''.join(map(methodcaller('blob'), content)))
+    glob = make_globals(lib, std_globals=options.std_globals)
+    compile(args, lib, glob, out, main_class=options.main_class,
+        width=options.width, height=options.height,
+        frame_rate=options.frame_rate)
 
 if __name__ == '__main__':
     from . import compile

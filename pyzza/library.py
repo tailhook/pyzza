@@ -1,9 +1,37 @@
 from weakref import ref
+import os.path
 
-from . import swf, tags, abc
+from . import swf, tags, abc, bytecode
 
 class ClassNotFoundError(Exception):
     pass
+
+def get_public_names(filename):
+    lib = Library()
+    lib.add_file(filename)
+    return lib.get_public_names()
+
+class LibCache:
+    files = {}
+    def __new__(C, filename):
+        if filename in C.files:
+            res = C.files[filename]
+            if res.mtime == os.path.getmtime(filename):
+                return
+        return object.__new__(C)
+
+    def __init__(self, filename):
+        self.code_headers = []
+        with open(filename, 'rb') as f:
+            h = swf.Header.read(f)
+            tag = None
+            taglist = []
+            while not isinstance(tag, tags.End):
+                tag = tags.read(h.file)
+                if isinstance(tag, tags.DoABC):
+                    tag.real_body._source = filename
+                    self.code_headers.append(tag.real_body)
+
 
 class Library:
     """
@@ -18,15 +46,7 @@ class Library:
         self.class_cache = {}
 
     def add_file(self, filename):
-        with open(filename, 'rb') as f:
-            h = swf.Header.read(f)
-            tag = None
-            taglist = []
-            while not isinstance(tag, tags.End):
-                tag = tags.read(h.file)
-                if isinstance(tag, tags.DoABC):
-                    tag.real_body._source = filename
-                    self.code_headers.append(tag.real_body)
+        self.code_headers.extend(LibCache(filename).code_headers)
 
     def get_class(self, package, name):
         if (package, name) in self.class_cache:
@@ -52,6 +72,12 @@ class Library:
             class_info=clsinfo,
             )
         return val
+
+    def get_public_names(self):
+        for head in self.code_headers:
+            for cls in head.class_info:
+                name = cls.instance_info.name
+                yield name.namespace.name, name.name
 
 class AS3Class:
 

@@ -1,0 +1,14 @@
+Global:
+    libraries:
+        - library.swf
+    pyzza-path:
+        - "."
+        - "../lib"
+
+Targets:
+    testpy.swf:
+        main-class: Main
+        main-source: testpy.py
+        width: 500
+        height: 375
+        frame-rate: 30
