@@ -8,7 +8,6 @@ Implement 'assert' statement (how?)
 Implement generators
 Implement getters and setters (using decorators)
 Fill global namespace
-Allow to supply '.swc' file as library
 Make syntax error reporting even better
 Mandatory optimizations:
     * remove zero jumps

@@ -1,5 +1,7 @@
 from weakref import ref
 import os.path
+import zipfile
+from contextlib import closing
 
 from . import swf, tags, abc, bytecode
 
@@ -22,15 +24,26 @@ class LibCache:
 
     def __init__(self, filename):
         self.code_headers = []
-        with open(filename, 'rb') as f:
-            h = swf.Header.read(f)
-            tag = None
-            taglist = []
-            while not isinstance(tag, tags.End):
-                tag = tags.read(h.file)
-                if isinstance(tag, tags.DoABC):
-                    tag.real_body._source = filename
-                    self.code_headers.append(tag.real_body)
+        if filename.endswith('.swc'):
+            zip = zipfile.ZipFile(filename)
+            for finfo in zip.filelist:
+                if finfo.filename.endswith('.swf'):
+                    with closing(zip.open(finfo.filename)) as ff:
+                        self._read(ff, filename + ':' + finfo.filename)
+        else:
+            with open(filename, 'rb') as f:
+                self._read(f, filename)
+
+
+    def _read(self, file, filename):
+        h = swf.Header.read(file)
+        tag = None
+        taglist = []
+        while not isinstance(tag, tags.End):
+            tag = tags.read(h.file)
+            if isinstance(tag, tags.DoABC):
+                tag.real_body._source = filename
+                self.code_headers.append(tag.real_body)
 
 
 class Library:
