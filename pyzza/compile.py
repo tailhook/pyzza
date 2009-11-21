@@ -51,7 +51,15 @@ class CodeHeader:
             options = []
             for a in arguments:
                 if not hasattr(a, 'default'): continue
-                options.append(abc.OptionDetail(a.default.value))
+                if isinstance(a.default, parser.Number):
+                    options.append(abc.OptionDetail(a.default.value))
+                elif isinstance(a.default, parser.String):
+                    options.append(abc.OptionDetail(a.default.value))
+                elif isinstance(a.default, parser.Name):
+                    options.append(abc.OptionDetail(
+                        const_names[a.default.value]))
+                else:
+                    raise NotImplementedError(a.default)
             if options:
                 mi.options = options
         if hasattr(frag, 'activation'):
@@ -214,6 +222,12 @@ class Builtin(NameType):
 
 ##### End Name Types #####
 
+const_names = {
+    'True': True,
+    'False': False,
+    'None': None,
+    'undefined': abc.Undefined(),
+}
 globals = {
     'True': True,
     'False': False,
@@ -316,7 +330,12 @@ class NameCheck:
 
     def visit_import(self, node):
         for name in node.names:
-            self.imported.add(name.value)
+            if isinstance(name, parser.Name):
+                self.imported.add(name.value)
+            elif isinstance(name, parser.Assoc):
+                self.imported.add(name.alias.value)
+            else:
+                raise NotImplementedError(name)
 
     def visit_for(self, node):
         for v in node.var:
@@ -599,8 +618,15 @@ class CodeFragment:
         assert void == True
         for name in node.names:
             package = node.module.value
-            name = name.value
-            prop = self.namespace[name]
+            if isinstance(name, parser.Name):
+                name = name.value
+                alias = name
+            elif isinstance(name, parser.Assoc):
+                alias = name.alias.value
+                name = name.name.value
+            else:
+                raise NotImplementedError(name)
+            prop = self.namespace[alias]
             assert isinstance(prop, Property)
             try:
                 cls = self.library.get_class(package, name)
@@ -1464,10 +1490,13 @@ def main():
         globals['Object'] = Class(lib.get_class('', 'Object'))
         globals['Boolean'] = Class(lib.get_class('', 'Boolean'))
         globals['bool'] = Class(lib.get_class('', 'Boolean'))
+        globals['int'] = Class(lib.get_class('', 'int'))
+        globals['uint'] = Class(lib.get_class('', 'uint'))
         globals['Error'] = Class(lib.get_class('', 'Error'))
         globals['TypeError'] = Class(lib.get_class('', 'TypeError'))
         globals['ArgumentError'] = Class(lib.get_class('', 'ArgumentError'))
         globals['ReferenceError'] = Class(lib.get_class('', 'ReferenceError'))
+        globals['isNaN'] = Property(abc.QName(abc.NSPackage(''), 'isNaN'))
     code_tags = []
     try:
         for file in args:

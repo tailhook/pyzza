@@ -419,6 +419,17 @@ class FileInput(GenericNode):
 def Nop(val, ctx):
     return
 
+class Assoc(Node):
+    __slots__ = ('name', 'alias')
+    def __init__(self, children, context):
+        self.name, _as, self.alias = children
+        assert _as.value == 'as', _as
+        super().__init__(context)
+    @property
+    def children(self):
+        yield self.name
+        yield self.alias
+
 def TName(child, ctx):
     if len(child) > 1:
         return Assoc(child, ctx)

@@ -20,10 +20,17 @@ def repr(value):
         return value.toString()
     elif isinstance(value, Array):
         return '[' + value.map(maprepr).join(', ') + ']'
+    elif value == None:
+        return 'null'
+    elif value == undefined:
+        return 'undefined'
     elif isinstance(value, Object):
-        if value.__repr__:
-            return value.__repr__()
-        elif value.constructor != Object:
+        try:
+            if value.__repr__:
+                return value.__repr__()
+        except ReferenceError: # for sealed (non-dynamic) classes
+            pass
+        if value.constructor != Object:
             return '<Instance of ' + value.constructor.toString() + '>'
         res = []
         for k, v in items(value):
