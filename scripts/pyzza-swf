@@ -1,0 +1,3 @@
+#!/usr/bin/python
+from pyzza.swf import main
+main()
