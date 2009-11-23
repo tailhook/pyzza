@@ -134,9 +134,6 @@ class bytecodes(metaclass=gather_bytecodes):
         code = 0x86
 
     class astypelate(Bytecode):
-        format = (
-            ('type', MultinameInfo, 'multiname', io.u30),
-            )
         code = 0x87
         stack_before = ('value', 'klass')
         stack_after = ('value',)
@@ -265,6 +262,9 @@ class bytecodes(metaclass=gather_bytecodes):
 
     class coerce_s(UnaryBytecode):
         code = 0x85
+
+    class coerce_o(UnaryBytecode):
+        code = 0x89 # something found in the internet
 
     class construct(Bytecode):
         format = (
@@ -633,12 +633,13 @@ class bytecodes(metaclass=gather_bytecodes):
         code = 0x1b
         def _read(self, stream, index):
             self.default_offset = Offset(stream.read_s24())
-            self.case_offsets = [stream.read_s24()
+            self.case_offsets = [Offset(stream.read_s24())
                 for i in range(stream.read_u30())]
-        def __repr__(self):
-            return '<{0} {1} {2}({3})>'.format(self.__class__.__name__,
+        def __str__(self):
+            return '{0} {1} {2}({3})'.format(self.__class__.__name__,
                 self.default_offset, len(self.case_offsets),
                 ','.join(map(str, self.case_offsets)))
+        stack_before = ('index',)
 
     class lshift(BinaryBytecode):
         code = 0xa5
@@ -899,6 +900,16 @@ class bytecodes(metaclass=gather_bytecodes):
     class urshift(BinaryBytecode):
         code = 0xa7
 
+    class makegeneric(Bytecode):
+        code = 0x53 # something found in the internet
+        format = (
+            ('arg_count', int, None, io.u30),
+            )
+        @property
+        def stack_before(self):
+            return tuple('param{0}'.format(i) for i in range(self.arg_count))
+        stack_after = ('newtype',)
+
 class Parser(object):
 
     def __init__(self, str, index):
@@ -912,7 +923,8 @@ class Parser(object):
                 code = self._stream.read_u8()
             except IndexError:
                 break #no more characters
-            code = bytecodes[code].read(self._stream, self._index)
+            code = bytecodes[code]
+            code = code.read(self._stream, self._index)
             yield pos, code
 
 class Assembler(object):

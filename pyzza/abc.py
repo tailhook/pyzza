@@ -64,8 +64,10 @@ class CPoolInfo(ABCStruct):
         self.ns_set_info = [NamespaceSetInfo.read(stream, index)
             for i in range(ns_set_count-1)]
         multiname_count = stream.read_u30()
-        self.multiname_info = [MultinameInfo.read(stream, index)
-            for i in range(multiname_count-1)]
+        # Some multinames refer to other multinames
+        self.multiname_info = mnames = []
+        for i in range(multiname_count-1):
+            mnames.append(MultinameInfo.read(stream, index))
         return self
 
     def write(self, stream, index):
@@ -564,6 +566,7 @@ CONSTANT_Multiname   = 0x09
 CONSTANT_MultinameA  = 0x0E
 CONSTANT_MultinameL  = 0x1B
 CONSTANT_MultinameLA = 0x1C
+CONSTANT_GenericType = 0x1D
 
 class MultinameInfo(ABCStruct):
 
@@ -667,6 +670,30 @@ class MultinameL(MultinameInfo):
         stream.write_u8(self.kind)
         stream.write_u30(index.get_namespace_set_index(self.namespace_set))
 
+class GenericType(MultinameInfo):
+    kind = CONSTANT_GenericType
+
+    def __init__(self, type, *args):
+        self.type = type
+        self.arguments = args
+
+    @classmethod
+    def _read(cls, stream, index):
+        type = index.get_multiname(stream.read_u30())
+        args = [index.get_multiname(stream.read_u30())
+            for i in range(stream.read_u30())]
+        return cls(type, *args)
+
+    def __repr__(self):
+        return '<{0} {1!r}[{2!r}]>'.format(self.__class__.__name__,
+            self.type, self.arguments)
+
+    def write(self, stream, index):
+        stream.write_u30(index.get_multiname_index(self.type))
+        stream.write_u30(len(self.arguments))
+        for i in self.arguments:
+            stream.write_u30(index.get_multiname_index(i))
+
 class MultinameLA(Multiname):
     kind = CONSTANT_MultinameLA
 
@@ -681,6 +708,7 @@ multiname_kinds = {
     CONSTANT_MultinameA: MultinameA,
     CONSTANT_MultinameL: MultinameL,
     CONSTANT_MultinameLA: MultinameLA,
+    CONSTANT_GenericType: GenericType,
     }
 
 class InstanceInfo(ABCStruct):

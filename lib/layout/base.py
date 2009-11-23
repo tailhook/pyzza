@@ -1,5 +1,6 @@
 from flash.display import Sprite, Shape as BaseShape
 from flash.events import Event
+from flash.display import StageAlign, StageScaleMode
 
 @package('layout')
 class WidgetConflict(Error):
@@ -192,3 +193,15 @@ class Layout:
             bounds.width = int(w+0.5)
             bounds.height = int(h+0.5)
             widget.update_size()
+
+@package('layout')
+class TopLevel(Sprite):
+    def __init__(self):
+        stage = self.stage
+        stage.align = StageAlign.TOP_LEFT
+        stage.scaleMode = StageScaleMode.NO_SCALE
+        self.layout.realize(self, stage.stageWidth, stage.stageHeight)
+        stage.addEventListener(Event.RESIZE, self.onresize)
+
+    def onresize(self, event):
+        self.layout.update_size(self.stage.stageWidth, self.stage.stageHeight)

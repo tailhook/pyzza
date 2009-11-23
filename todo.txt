@@ -1,5 +1,6 @@
 Create standard library with exceptions, hacked methods and so on for more
     pythonic look and feel
+Implement Vector type
 Implement try...finally
 Implement compilation of all node types (bitwise arithmetic, what else?)
 Implement loop primitives (zip, enumerate)

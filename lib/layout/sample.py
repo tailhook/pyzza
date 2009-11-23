@@ -1,5 +1,4 @@
-from layout import RoundRect, Poly, Layout, State, Rel, Constraint
-from flash.display import Sprite, StageAlign, StageScaleMode
+from layout import TopLevel, RoundRect, Poly, Layout, State, Rel, Constraint
 from flash.events import Event
 
 def play(name, color, states):
@@ -19,11 +18,8 @@ def stop(name, color, states):
         ], states)
 
 @package('layout.sample')
-class Main(Sprite):
+class Main(TopLevel):
     def __init__(self):
-        stage = self.stage
-        stage.align = StageAlign.TOP_LEFT
-        stage.scaleMode = StageScaleMode.NO_SCALE
         self.layout = Layout([
             RoundRect('bg', 0xC0C0C0, 18, {
                 'normal': State('normal',
@@ -63,8 +59,4 @@ class Main(Sprite):
                     Rel(0.7, 0.7, 'stop_bg', 'stop_bg')),
                 }),
             ])
-        self.layout.realize(self, stage.stageWidth, stage.stageHeight)
-        stage.addEventListener(Event.RESIZE, self.onresize)
-
-    def onresize(self, event):
-        self.layout.update_size(self.stage.stageWidth, self.stage.stageHeight)
+        super().__init__()

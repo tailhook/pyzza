@@ -110,7 +110,7 @@ def _makedeps(fullname):
             'exports': list(exports),
             'imports': list(imports),
             }
-    elif ext == '.swf':
+    elif ext in ('.swf', '.swc'):
         ex = list(library.get_public_names(fullname))
         return {
             'time': os.path.getmtime(fullname),
@@ -123,7 +123,7 @@ def update_dependencies(dependencies, recipe):
     def adddeps(info):
         for i in info.get('exports', ()):
             if i in exists:
-                warnings.warn("Class {0[0]}:{0:[1]} is contained in "
+                warnings.warn("Class {0[0]}:{0[1]} is contained in "
                               "both {1!r} and {2!r}"
                               .format(i, fullname, exists[i]))
             else:
@@ -213,18 +213,23 @@ def build(files, output, recipe, info):
         main_class=info.get('main-class', 'Main'))
 
 def files(src, dependencies):
-    queue = deque([src])
-    visited = set()
-    while queue:
-        fname = queue.popleft()
-        yield fname
+    all = [src]
+    for fname in all:
         for dname in dependencies[fname].get('depends', ()):
-            if dname in visited:
-                continue
-            queue.append(dname)
-            visited.add(dname)
+            if fname in dependencies[dname].get('depends', ()):
+                warnings.warn("Circular dependency between {0!r} and {1!r}"
+                    .format(fname, dname))
+            else:
+                all.append(dname)
+    res = []
+    visited = set()
+    for v in reversed(all):
+        if v not in visited:
+            res.append(v)
+            visited.add(v)
+    return list(reversed(res))
 
-def make(recipe, dependencies, force=False):
+def make(recipe, dependencies, force=False, verbosity=0):
     for name, info in recipe['Targets'].items():
         if 'main-source' in info:
             src = os.path.realpath(os.path.join(
@@ -239,7 +244,14 @@ def make(recipe, dependencies, force=False):
                         need_build = True
                         break
             if need_build:
+                if verbosity > 1:
+                    print("File {0!r} will be build from the following sources:"
+                        .format(targ))
+                    for f in filelist:
+                        print("    {0}".format(f))
                 build(filelist, targ, recipe, info)
+            elif verbosity > 1:
+                print("File {0!r} is skipped".format(targ))
         else:
             raise NotImplementedError('Please specify source file for {0!r}'
                 .format(name))
@@ -263,7 +275,8 @@ def main():
     if options.cache:
        with open(options.filename + '.dep', 'wt') as depfile:
            yaml.dump(dependencies, depfile)
-    make(recipe, dependencies, force=options.force_rebuild)
+    make(recipe, dependencies, force=options.force_rebuild,
+        verbosity=options.verbosity)
 
 if __name__ == '__main__':
     main()

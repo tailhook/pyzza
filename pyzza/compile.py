@@ -12,6 +12,7 @@ class SyntaxError(Exception):
         self.context = kwargs
 
 class NameError(SyntaxError): pass
+class NotAClassError(SyntaxError): pass
 class VerificationError(Exception): pass
 class StackError(VerificationError): pass
 
@@ -663,7 +664,14 @@ class CodeFragment:
         if not node.bases:
             val = self.library.get_class('', 'Object')
         else:
-            val = self.find_name(node.bases[0].value, node.bases[0]).class_info
+            name = self.find_name(node.bases[0].value, node.bases[0])
+            try:
+                val = name.class_info
+            except AttributeError:
+                raise NotAClassError(
+                    "Imported name {!r} not found or not a class"
+                    .format(name.property_name), filename=self.filename,
+                    lineno=node.bases[0].lineno, column=node.bases[0].col)
         bases = []
         while val:
             bases.append(val)
@@ -1471,6 +1479,7 @@ def print_error(e):
             print('{0:4d}  {1}'.format(no, line.rstrip()))
             if no == e.context['lineno']:
                 print(' ' * (e.context['column']+6) + '^')
+    print("{0.__class__.__name__}: {0.message}".format(e))
 
 def make_globals(lib, std_globals=True):
     glob = Globals()
@@ -1482,6 +1491,7 @@ def make_globals(lib, std_globals=True):
         glob.namespace['float'] = Class(lib.get_class('', 'Number'))
         glob.namespace['list'] = Class(lib.get_class('', 'Array'))
         glob.namespace['bool'] = Class(lib.get_class('', 'Boolean'))
+        glob.namespace['isNaN'] = Property(abc.QName(abc.NSPackage(''), 'isNaN'))
     return glob
 
 def compile(files, lib, glob, output, main_class,
@@ -1499,6 +1509,7 @@ def compile(files, lib, glob, output, main_class,
             code_tags.append(code_header.make_tag())
     except (parser.SyntaxError, SyntaxError) as e:
         print_error(e)
+        return
     h = swf.Header(frame_size=(int(width*20), int(height*20)),
                    frame_rate=int(frame_rate*256))
     content = [tags.FileAttributes()] \
