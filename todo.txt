@@ -1,5 +1,8 @@
 Create standard library with exceptions, hacked methods and so on for more
     pythonic look and feel
+Implement verifier like one in Tamarin for the following:
+    * add coerce only when needed
+    * better stack size calculation (bad for ternary operator currently)
 Implement Vector type
 Implement try...finally
 Implement compilation of all node types (bitwise arithmetic, what else?)

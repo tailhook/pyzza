@@ -413,6 +413,7 @@ class CodeFragment:
         parser.Return: 'return',
         parser.Raise: 'raise',
         parser.If: 'if',
+        parser.Ternary: 'inlineif',
         parser.For: 'for',
         parser.While: 'while',
         parser.Try: 'try',
@@ -1059,6 +1060,20 @@ class CodeFragment:
             self.exec_suite(node.else_)
         self.bytecodes.append(endlabel)
 
+    def visit_inlineif(self, node, void):
+        endlabel = bytecode.Label()
+        self.push_value(node.cond)
+        lab = bytecode.Label()
+        self.bytecodes.append(bytecode.iffalse(lab))
+        self.execute(node.expr1, void)
+        self.bytecodes.append(bytecode.coerce_a())
+        self.bytecodes.append(bytecode.jump(endlabel))
+        self.bytecodes.append(bytecode.pop())
+        self.bytecodes.append(lab)
+        self.execute(node.expr2, void)
+        self.bytecodes.append(bytecode.coerce_a())
+        self.bytecodes.append(endlabel)
+
     def visit_for(self, node, void):
         assert void == True
         if isinstance(node.expr, parser.Call) \
@@ -1171,20 +1186,28 @@ class CodeFragment:
     def visit_or(self, node, void):
         endlabel = bytecode.Label()
         self.push_value(node.left)
+        self.bytecodes.append(bytecode.coerce_a())
         self.bytecodes.append(bytecode.dup())
         self.bytecodes.append(bytecode.iftrue(endlabel))
         self.bytecodes.append(bytecode.pop())
         self.push_value(node.right)
+        self.bytecodes.append(bytecode.coerce_a())
         self.bytecodes.append(endlabel)
+        if void:
+            self.bytecodes.append(bytecode.pop())
 
     def visit_and(self, node, void):
         endlabel = bytecode.Label()
         self.push_value(node.left)
+        self.bytecodes.append(bytecode.coerce_a())
         self.bytecodes.append(bytecode.dup())
         self.bytecodes.append(bytecode.iffalse(endlabel))
         self.bytecodes.append(bytecode.pop())
         self.push_value(node.right)
+        self.bytecodes.append(bytecode.coerce_a())
         self.bytecodes.append(endlabel)
+        if void:
+            self.bytecodes.append(bytecode.pop())
 
     ##### Math #####
 

@@ -227,6 +227,7 @@ class Loops(Test):
         super().__init__(reporter, name)
 
     def test(self):
+        self.testTernary()
         self.testRange1()
         self.testRange2()
         self.testRange3()
@@ -237,6 +238,15 @@ class Loops(Test):
         self.testNested()
         self.testObjectIter()
         self.mutable_iter()
+
+    def testTernary(self):
+        a = 1
+        self.assertEquals((2 if a else 3), 2)
+        self.assertEquals(7 if a else 8, 7)
+        self.assertEquals(7 if not a else 8, 8)
+        self.assertEquals(2 if not a else 3, 3)
+        a = ''
+        self.assertEquals(2 if a and 1 else 3, 3)
 
     def testRange1(self):
         j = 1.1

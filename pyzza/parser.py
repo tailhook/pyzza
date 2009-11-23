@@ -220,6 +220,19 @@ class For(Node):
         if self.else_:
             yield self.else_
 
+class Ternary(Node):
+    __slots__ = ('cond', 'expr1', 'expr2')
+    def __init__(self, children, context):
+        self.expr1, _if, self.cond, _else, self.expr2 = children
+        assert _if.value == 'if', _if
+        assert _else.value == 'else', _else
+        super().__init__(context)
+    @property
+    def children(self):
+        yield self.cond
+        yield self.expr1
+        yield self.expr2
+
 class While(Node):
     __slots__ = ('condition', 'body', 'else_')
     def __init__(self, children, context):
@@ -501,7 +514,7 @@ def _NotTest(child, ctx):
 def Test(child, ctx):
     if len(child) < 2:
         return child[0]
-    raise NotImplementedError(child)
+    return Ternary(child, ctx)
 
 def GenExp(child, ctx):
     if len(child) < 2:
