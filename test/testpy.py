@@ -515,6 +515,18 @@ class A:
     def world(self):
         return self.hello() + ' baby'
 
+    @classmethod
+    def get_static(cls):
+        return cls.STATIC2
+
+    @classmethod
+    def say_hello(cls):
+        return cls().hello()
+
+    @staticmethod
+    def say_hi():
+        return 'hi'
+
 class B(A):
     STATIC3 = 111
     def __init__(self):
@@ -554,6 +566,7 @@ class TestClass(Test):
         self.testOverride()
         self.testStatic()
         self.testSlots()
+        self.testClassmethods()
 
     def testOverride(self):
         self.assertEquals(A().hello(), 'hello')
@@ -599,6 +612,17 @@ class TestClass(Test):
         self.assertEquals(c.c, 7)
         self.assertEquals(c.d, 4)
         self.assertEquals(c.e, 'hello')
+
+    def testClassmethods(self):
+        self.assertEquals(A.get_static(), 4)
+        self.assertEquals(A.say_hello(), 'hello')
+        self.assertEquals(A.say_hi(), 'hi')
+        try:
+            B.say_hello()
+        except TypeError:
+            pass
+        else:
+            raise Failure("ReferenceError not raised")
 
 def global_fun(a, b):
     return (a+b)*(a-b)

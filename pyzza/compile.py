@@ -101,8 +101,12 @@ class CodeHeader:
                     abc.QName(abc.NSPackage(''), k),
                     abc.TraitSlot(),
                     attr=0))
+            elif isinstance(m, ClassMethod):
+                traits.append(abc.TraitsInfo(
+                    abc.QName(abc.NSPackage(''), k),
+                    abc.TraitMethod(m.code_fragment._method_info),
+                    attr=0))
         cls.trait = traits
-        cls.trait = []
         inst.name = abc.QName(package, name)
         inst.super_name = bases[0].name
         inst.flags = 0
@@ -197,6 +201,9 @@ class Register(NameType):
         else:
             return '<R:{0:x}>'.format(id(self))
 
+class ClsRegister(Register):
+    """Special register that means ``self`` for classmethod"""
+
 class Builtin(NameType):
     """Some built-in (for global namespace)"""
 
@@ -208,6 +215,11 @@ class ClosureSlot(NameType):
 
 class Method(NameType):
     """Method (for class namespace)"""
+    def __init__(self, frag):
+        self.code_fragment = frag
+
+class ClassMethod(NameType):
+    """Class method (for class namespace)"""
     def __init__(self, frag):
         self.code_fragment = frag
 
@@ -442,6 +454,7 @@ class CodeFragment:
             arguments=(None,),
             varargument=None,
             filename=None,
+            classmethod=False,
             ):
         self.library = library
         self.code_header = code_header
@@ -480,6 +493,7 @@ class CodeFragment:
         self.loopstack = [] # pairs of continue label and break label
         # extra registers used for computations
         # keyed by register type
+        self.classmethod = classmethod
         self.extra_registers = defaultdict(list)
         self.exceptions = []
         self.mode = mode
@@ -496,6 +510,8 @@ class CodeFragment:
                 self.bytecodes.append(bytecode.setslot(self.namespace[v].index))
             else:
                 self.namespace[v] = Register(i)
+        if self.classmethod:
+            self.namespace[arguments[0]] = ClsRegister(0)
         self.exec_suite(ast.body if hasattr(ast, 'body') else ast)
         self.bytecodes.append(bytecode.returnvoid())
         self.fix_registers()
@@ -703,18 +719,30 @@ class CodeFragment:
         else:
             vararg = None
         if self.mode == 'class_body':
+            classmethod = False
+            staticmethod = False
             if node.decorators:
                 for i in node.decorators:
-                    raise NotImplementedError("No decorator ``{0}''"
-                        .format(i.name))
+                    if i.name.value == 'classmethod':
+                        classmethod = True
+                    elif i.name.value == 'staticmethod':
+                        staticmethod = True
+                    else:
+                        raise NotImplementedError("No decorator ``{0}''"
+                            .format(i.name))
             frag = CodeFragment(node, self.library, self.code_header,
                 mode="method",
                 parent_namespaces=self.parent_namespaces,
-                arguments=list(map(attrgetter('name.value'), args)),
+                arguments=([None] if staticmethod else []) +
+                    list(map(attrgetter('name.value'), args)),
                 varargument=vararg,
                 filename=self.filename,
+                classmethod=classmethod,
                 )
-            self.namespace[node.name.value] = Method(frag)
+            if classmethod or staticmethod:
+                self.namespace[node.name.value] = ClassMethod(frag)
+            else:
+                self.namespace[node.name.value] = Method(frag)
             self.code_header.add_method_body(
                 '{0}/{1}'.format(self.class_name.value, node.name.value),
                 frag, node.arguments)
@@ -897,6 +925,14 @@ class CodeFragment:
             val = self.find_name(name, node.expr)
             if isinstance(val, (Class, NewClass)):
                 self.bytecodes.append(bytecode.getlex(val.property_name))
+                for i in node.arguments:
+                    self.push_value(i)
+                self.bytecodes.append(bytecode.construct(
+                    len(node.arguments)))
+                if void:
+                    self.bytecodes.append(bytecode.pop())
+            elif isinstance(val, ClsRegister):
+                self.bytecodes.append(bytecode.getlocal(val))
                 for i in node.arguments:
                     self.push_value(i)
                 self.bytecodes.append(bytecode.construct(
