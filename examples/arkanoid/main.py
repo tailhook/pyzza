@@ -5,54 +5,68 @@ from flash.text import TextField
 from flash.utils import getTimer
 from flash.geom import Matrix
 from flash.display import GradientType, SpreadMethod
+from game import Frame, Keys
+from layout import TopLevel, Widget
+from layout import State, Layout
 
 class Ball(Sprite):
     def __init__(self, field):
         self.field = field
         self.graphics.beginFill(0xFF0000)
-        self.graphics.drawCircle(0, 0, field.BALLRADIUS)
+        self.graphics.drawCircle(-field.BALLRADIUS/2, -field.BALLRADIUS/2,
+            field.BALLRADIUS)
         self.graphics.endFill()
         self.cacheAsBitmap = True
+        self.radius = field.BALLRADIUS
+
+    def initposition(self):
+        self.pos_x = self.field.TOTALWIDTH/2
+        self.pos_y = self.field.TOTALHEIGHT/2
+        self.speed_x = 0
+        self.speed_y = 200
 
     def start(self):
-        self.pos_x = 0.5
-        self.pos_y = 0.5
-        self.speed_x = 0
-        self.speed_y = 0.3
+        self.initposition()
+        Frame.attach(self.frame)
 
     def stop(self):
+        Frame.detach(self.frame)
         self.speed_x = 0
         self.speed_y = 0
 
     def frame(self, delta):
         sx = self.speed_x*delta
         sy = self.speed_y*delta
-        self.pos_x += sx
-        self.pos_y += sy
-        if self.pos_x < 0:
-            self.pos_x = -self.pos_x
+        nx = self.pos_x + sx
+        ny = self.pos_y + sy
+        if nx < self.radius:
+            self.pos_x = -nx + 2*self.radius
             self.speed_x = -self.speed_x
             self.speed_x *= 0.75
-        elif self.pos_x > 1:
-            self.pos_x = 2 - self.pos_x
-            self.pos_x = -self.pos_x
+        elif nx > self.field.TOTALWIDTH - self.radius:
+            self.pos_x = self.field.TOTALWIDTH*2 - 2*self.radius - nx
+            self.speed_x = -self.speed_x
             self.speed_x *= 0.75
-        if self.pos_y < 0:
-            self.pos_y = -self.pos_y
+        else:
+            self.pos_x = nx
+        if ny < self.radius:
+            self.pos_y = -ny + 2*self.radius
             self.speed_y = -self.speed_y
-        elif self.pos_y > 1:
-            self.start()
-        self.x = Math.round(self.field.PADDING \
-            + (self.field.TOTALWIDTH - self.field.PADDING*2)*self.pos_x)
-        self.y = Math.round(self.field.PADDING \
-            + (self.field.TOTALHEIGHT - self.field.PADDING*2)*self.pos_y)
+        elif ny > self.field.TOTALHEIGHT:
+            self.initposition()
+        else:
+            self.pos_y = ny
+        self.x = Math.round(self.pos_x)
+        self.y = Math.round(self.pos_y)
 
 class Racket(Sprite):
     def __init__(self, field):
-        self.prepare_keys()
         self.racket_width = 80
         self.field = field
         self.pos = 0.5
+
+    def draw(self):
+        field = self.field
         self.x = Math.round((field.TOTALWIDTH - self.racket_width)*self.pos)
         self.y = field.TOTALHEIGHT - field.BRICKHEIGHT - field.PADDING
         m = Matrix()
@@ -83,53 +97,20 @@ class Racket(Sprite):
         self.graphics.endFill()
         self.cacheAsBitmap = True
 
-    def prepare_keys(self):
-        self.keycodes = {
-            '37': 'left',
-            '39': 'right',
-            }
-
     def start(self):
-        self.keys = {}
-        self.speed = 0
-        self.stage.addEventListener(KeyboardEvent.KEY_DOWN, self.keydown)
-        self.stage.addEventListener(KeyboardEvent.KEY_UP, self.keyup)
+        Frame.attach(self.frame)
+        Keys.register(Keys.LEFT, 'racket_left')
+        Keys.register(Keys.RIGHT, 'racket_right')
 
     def stop(self):
-        self.stage.removeEventListener(KeyboardEvent.KEY_DOWN, self.keydown)
-        self.stage.removeEventListener(KeyboardEvent.KEY_UP, self.keyup)
-        del self.keys, self.speed
-
-    def keydown(self, event):
-        code = String(event.keyCode)
-        if event.shiftKey:
-            code = 's' + code
-        if event.ctrlKey:
-            code = 'c' + code
-        if event.altKey:
-            code = 'a' + code
-        code = self.keycodes[code]
-        if code:
-            self.keys[code] = True
-
-    def keyup(self, event):
-        code = String(event.keyCode)
-        if event.shiftKey:
-            code = 's' + code
-        if event.ctrlKey:
-            code = 'c' + code
-        if event.altKey:
-            code = 'a' + code
-        code = self.keycodes[code]
-        if code:
-            del self.keys[code]
+        Frame.detach(self.frame)
 
     def frame(self, delta):
         if delta:
-            if self.keys.left:
-                self.speed -= 1.0*delta
-            elif self.keys.right:
-                self.speed += 1.0*delta
+            if Keys.keys.racket_left:
+                self.speed -= delta
+            elif Keys.keys.racket_right:
+                self.speed += delta
             else:
                 if Math.abs(self.speed) > 0.01:
                     self.speed *= Math.pow(0.01, delta)
@@ -141,9 +122,7 @@ class Racket(Sprite):
                     self.pos = 0
                 elif self.pos > 1:
                     self.pos = 1
-        self.x = Math.round(
-            (self.field.TOTALWIDTH-self.racket_width
-                - self.field.PADDING*2)*self.pos + self.field.PADDING)
+        self.x = Math.round((self.field.TOTALWIDTH-self.racket_width)*self.pos)
 
 class Brick(Sprite):
     def __init__(self, field, brickdef):
@@ -216,46 +195,34 @@ level1 = Level({
     rrrrggggggrrrr
     """)
 
-@package('arkanoid')
-class Field(Sprite):
-    def __init__(self, width, height):
-        #debug
-        label = TextField()
-        self.label = label
-        self.addChild(label)
-        #enddebug
-        self.TOTALWIDTH = width
-        self.TOTALHEIGHT = height
+class Field(Widget):
+    def __init__(self, level, name, states):
+        super().__init__(name, states)
         self.init_const()
-        self.draw()
         self.ball = Ball(self)
         self.racket = Racket(self)
         self.bricks = {}
+        self.drawn = False
         level1.populate(self)
         self.addChild(self.ball)
         self.addChild(self.racket)
 
     def start(self):
-        self.addEventListener(Event.ENTER_FRAME, self.frame)
         self.racket.start()
         self.ball.start()
-        self.old_frame = getTimer()
+        Frame.attach(self.frame)
 
     def stop(self):
+        Frame.detach(self.frame)
         self.ball.stop()
         self.racket.stop()
-        self.removeEventListener(Event.ENTER_FRAME, self.frame)
 
-    def frame(self, event):
-        newframe = getTimer()
-        delta = (newframe - self.old_frame)*0.001
-        self.racket.frame(delta)
-        self.ball.frame(delta)
+    def frame(self, delta):
         test = self.ball.hitTestObject
         if test(self.racket):
             self.ball.speed_y = -self.ball.speed_y
             if self.racket.speed:
-                self.ball.speed_x += self.racket.speed*0.5
+                self.ball.speed_x += self.racket.speed*5
         bx = (self.ball.x - self.PADDING)
         bax = Math.floor((bx - self.BALLRADIUS) / self.BRICKWIDTH)
         bbx = Math.floor((bx + self.BALLRADIUS) / self.BRICKWIDTH)
@@ -273,7 +240,6 @@ class Field(Sprite):
             if test(b) and b.hit():
                 del self.bricks[bkey]
                 self.removeChild(b)
-        self.old_frame = newframe
 
     def init_const(self):
         self.BALLRADIUS = 10
@@ -289,17 +255,30 @@ class Field(Sprite):
         brick.y = self.PADDING+self.BRICKHEIGHT*y
         self.addChild(brick)
 
-    def draw(self):
-        self.graphics.lineStyle(2)
-        self.graphics.drawRoundRect(5, 5,
-            self.TOTALWIDTH - 10, self.TOTALHEIGHT-10,
+    def draw(self, width, height):
+        self.TOTALWIDTH = width
+        self.TOTALHEIGHT = height
+        if not self.drawn:
+            self._draw()
+            self.drawn = True
+            self.racket.draw()
+
+    def _draw(self):
+        self.graphics.lineStyle(2, 0x000000)
+        self.graphics.drawRoundRect(0, 0,
+            self.TOTALWIDTH, self.TOTALHEIGHT,
             self.ROUND, self.ROUND)
 
 @package('arkanoid')
-class Main(Sprite):
+class Main(TopLevel):
     def __init__(self):
-        self.stage.align = StageAlign.TOP_LEFT
-        self.stage.scaleMode = StageScaleMode.NO_SCALE
-        f = Field(600, 400)
-        self.addChild(f)
-        f.start()
+        Frame.start(self, True)
+        Keys.start(self.stage)
+        self.layout = Layout([
+            Field(level1, 'field', {
+                'normal': State.parse(
+                'normal:(0,0)-(1,1)*(0.5,0.5)[560,400]'),
+                }),
+            ])
+        super().__init__()
+        self.layout.mapping.field.start()

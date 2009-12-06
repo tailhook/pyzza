@@ -1,6 +1,7 @@
 from flash.display import Sprite, Shape as BaseShape
 from flash.events import Event
 from flash.display import StageAlign, StageScaleMode
+from string import repr
 
 @package('layout')
 class WidgetConflict(Error):
@@ -22,8 +23,7 @@ class Rect:
 @package('layout')
 class Rel:
     __slots__ = ('relx', 'rely', 'offx', 'offy', 'tox', 'toy')
-    def __init__(self, relx, rely,
-        tox=None, toy=None, offx=0, offy=0):
+    def __init__(self, relx, rely, tox=None, toy=None, offx=0, offy=0):
         self.relx = relx
         self.rely = rely
         if tox:
@@ -52,11 +52,53 @@ class Constraint:
 @package('layout')
 class State:
     __slots__ = ('name', 'rel1', 'rel2', 'constraint')
+    re = RegExp(r'''^
+        (\w+) \:
+        (?:<(\w*)(?::(\w+))?>)?
+        \((?:<(\w*)(?::(\w+))?>)?
+            (\d+|\d*\.\d+),(\d+|\d*\.\d+) (?:([+-]\d+)([+-]\d+)?)?\) -
+        \((?:<(\w*)(?::(\w+))?>)?
+            (\d+|\d*\.\d+),(\d+|\d*\.\d+) (?:([+-]\d+)([+-]\d+)?)?\)
+        (?: \* \((\d+|\d*\.\d+) , (\d+|\d*\.\d+)\) )?
+        (?: \[(\d*)(?:(-)(\d*))? , (\d*)(?:(-)(\d*))?\] )?
+        $''', 'x')
     def __init__(self, name, rel1, rel2, constraint=None):
         self.name = name
         self.rel1 = rel1
         self.rel2 = rel2
         self.constraint = constraint
+
+    @classmethod
+    def parse(cls, string):
+        val = cls.re.exec(string)
+        if not val:
+            raise Error("Wrong state expression {!r}".format(string))
+        _, statename, globrelx, globrely, \
+            rel1tox, rel1toy, rel1x, rel1y, rel1offx, rel1offy, \
+            rel2tox, rel2toy, rel2x, rel2y, rel2offx, rel2offy, \
+            alignx, aligny, \
+            minx, xc, maxx, miny, yc, maxy = val
+        if alignx or aligny or minx or maxx or miny or maxy:
+            constraint = Constraint(
+                float(alignx) if alignx else None,
+                float(aligny) if aligny else None,
+                int(minx) if minx else None,
+                int(miny) if miny else None,
+                (int(maxx) if maxx else None) if xc else (int(minx) if minx else None),
+                (int(maxy) if maxy else None) if yc else (int(miny) if miny else None),
+                )
+        else:
+            constraint = None
+        return cls(statename,
+            Rel(float(rel1x), float(rel1y),
+                rel1tox or globrelx or None,
+                rel1toy or rel1tox or globrely or globrelx or None,
+                rel1offx and int(rel1offx) or 0, rel1offy and int(rel1offy) or 0),
+            Rel(float(rel2x), float(rel2y),
+                rel2tox or globrelx or None,
+                rel2toy or rel2tox or globrely or globrelx or None,
+                rel2offx and int(rel2offx) or 0, rel2offy and int(rel2offy) or 0),
+            constraint)
 
 @package('layout')
 class Widget(Sprite):
@@ -72,6 +114,10 @@ class Widget(Sprite):
         b = self.bounds
         self.x = b.x
         self.y = b.y
+        self.draw(b.width, b.height)
+
+    def draw(self, width, height):
+        self.graphics.clear()
 
 @package('layout')
 class Shape(BaseShape):
@@ -88,6 +134,9 @@ class Shape(BaseShape):
         self.x = b.x
         self.y = b.y
         self.draw(b.width, b.height)
+
+    def draw(self, width, height):
+        self.graphics.clear()
 
 @package('layout')
 class Layout:
@@ -175,13 +224,13 @@ class Layout:
             if cons:
                 if isinstance(cons, str):
                     raise Error('{!r}'.format(cons))
-                if cons.minx >= 0:
+                if cons.minx != None and cons.minx >= 0:
                     w = max(w, cons.minx)
-                if cons.miny >= 0:
+                if cons.miny != None and cons.miny >= 0:
                     h = max(h, cons.miny)
-                if cons.maxx >= 0:
+                if cons.maxx != None and cons.maxx >= 0:
                     w = min(w, cons.maxx)
-                if cons.maxy >= 0:
+                if cons.maxy != None and cons.maxy >= 0:
                     h = min(h, cons.maxy)
                 if w != ow and not isNaN(cons.alignx):
                     l = l + (ow-w)*cons.alignx

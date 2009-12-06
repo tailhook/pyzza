@@ -620,7 +620,7 @@ class TestClass(Test):
         try:
             B.say_hello()
         except TypeError:
-            pass
+            pass # sorry also for this error
         else:
             raise Failure("ReferenceError not raised")
 

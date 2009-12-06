@@ -2,10 +2,13 @@ from weakref import ref
 import os.path
 import zipfile
 from contextlib import closing
+import itertools
 
 from . import swf, tags, abc, bytecode
 
-class ClassNotFoundError(Exception):
+class PropertyNotFoundError(Exception):
+    pass
+class ClassNotFoundError(PropertyNotFoundError):
     pass
 
 def get_public_names(filename):
@@ -43,6 +46,15 @@ class LibCache:
             tag = tags.read(h.file)
             if isinstance(tag, tags.DoABC):
                 tag.real_body._source = filename
+                names = {}
+                for t in tag.real_body.script_info[-1].traits_info:
+                    nm = t.name
+                    if isinstance(nm.namespace, abc.NSPackage):
+                        if isinstance(t.data, abc.TraitClass):
+                            names[nm.namespace.name, nm.name] = 'class'
+                        elif isinstance(t.data, abc.TraitMethod):
+                            names[nm.namespace.name, nm.name] = 'function'
+                tag.real_body._names = names
                 self.code_headers.append(tag.real_body)
 
 
@@ -57,40 +69,53 @@ class Library:
     def __init__(self):
         self.code_headers = []
         self.class_cache = {}
+        self._names = {}
 
     def add_file(self, filename):
         self.code_headers.extend(LibCache(filename).code_headers)
+
+    def get_property_type(self, package, name):
+        for head in itertools.chain((self,), self.code_headers):
+            if (package, name) in head._names:
+                return head._names[package, name]
+        else:
+            raise PropertyNotFoundError(package, name)
 
     def get_class(self, package, name):
         if (package, name) in self.class_cache:
             return self.class_cache[package, name]
         for head in self.code_headers:
-            for (idx, cls) in enumerate(head.class_info):
-                qname = cls.instance_info.name
-                if name == qname.name and qname.namespace.name == package:
-                    res = AS3Class(qname, self,
-                        class_info=cls,
-                        index=idx,
-                        header=head,
-                        )
-                    self.class_cache[package, name] = res
-                    return res
+            if (package, name) in head._names:
+                for (idx, cls) in enumerate(head.class_info):
+                    qname = cls.instance_info.name
+                    if name == qname.name and qname.namespace.name == package:
+                        res = AS3Class(qname, self,
+                            class_info=cls,
+                            index=idx,
+                            header=head,
+                            )
+                        self.class_cache[package, name] = res
+                        return res
         else:
             raise ClassNotFoundError(package, name)
 
     def add_class(self, clsinfo):
         name = clsinfo.instance_info.name
+        self._names[name.namespace.name, name.name] = 'class'
         val = self.class_cache[name.namespace.name, name.name] = AS3Class(
             name, self,
             class_info=clsinfo,
             )
         return val
 
+    def add_name(self, package, name, type):
+        assert type in ('function', 'class')
+        self._names[package, name] = type
+
     def get_public_names(self):
         for head in self.code_headers:
-            for cls in head.class_info:
-                name = cls.instance_info.name
-                yield name.namespace.name, name.name
+            for ns, nm in head._names:
+                yield ns, nm
 
 class AS3Class:
 

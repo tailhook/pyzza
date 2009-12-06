@@ -12,6 +12,7 @@ class SyntaxError(Exception):
         self.context = kwargs
 
 class NameError(SyntaxError): pass
+class ImportError(SyntaxError): pass
 class NotAClassError(SyntaxError): pass
 class VerificationError(Exception): pass
 class StackError(VerificationError): pass
@@ -282,6 +283,7 @@ class NameCheck:
         self.allnames = set()
         self.imported = set()
         self.exports = set()
+        self.public = set()
         if hasattr(node, 'arguments'):
             self.localnames = set(map(attrgetter('name.value'), node.arguments))
         else:
@@ -302,6 +304,7 @@ class NameCheck:
         node.func_locals = frozenset(self.localnames)
         node.func_globals = frozenset(glob | self.allnames - self.localnames)
         node.func_imports = frozenset(self.imported)
+        node.func_publicnames = frozenset(self.public)
         if hasattr(self, 'slots'):
             assert isinstance(node, parser.Class)
             node.class_slots = self.slots
@@ -310,11 +313,21 @@ class NameCheck:
 
     def visit_function(self, node):
         NameCheck(node)
+        if node.decorators:
+            for i in node.decorators:
+                if i.name.value == 'package':
+                    self.public.add((i.arguments[0].value, node.name.value,
+                        'function'))
         self.localnames.add(node.name.value)
         self.functions.append(node)
 
     def visit_class(self, node):
         NameCheck(node)
+        if node.decorators:
+            for i in node.decorators:
+                if i.name.value == 'package':
+                    self.public.add((i.arguments[0].value, node.name.value,
+                    'class'))
         self.localnames.add(node.name.value)
         self.exports.add(node.name.value)
         self.functions.append(node)
@@ -512,6 +525,8 @@ class CodeFragment:
                 self.namespace[v] = Register(i)
         if self.classmethod:
             self.namespace[arguments[0]] = ClsRegister(0)
+        for args in ast.func_publicnames:
+            self.library.add_name(*args)
         self.exec_suite(ast.body if hasattr(ast, 'body') else ast)
         self.bytecodes.append(bytecode.returnvoid())
         self.fix_registers()
@@ -651,13 +666,19 @@ class CodeFragment:
             prop = self.namespace[alias]
             assert isinstance(prop, Property)
             try:
-                cls = self.library.get_class(package, name)
-            except library.ClassNotFoundError:
-                prop.name = abc.QName(abc.NSPackage(package), name)
-            else:
-                prop.__class__ = Class
-                prop.class_info = cls
-                prop.name = cls.name
+                typ = self.library.get_property_type(package, name)
+                if typ == 'class':
+                    cls = self.library.get_class(package, name)
+                    prop.__class__ = Class
+                    prop.class_info = cls
+                    prop.name = cls.name
+                elif typ == 'function':
+                    prop.name = abc.QName(abc.NSPackage(package), name)
+                else:
+                    raise NotImplementedError(typ)
+            except library.PropertyNotFoundError:
+                raise ImportError('{0}:{1}'.format(package, name),
+                    filename=self.filename, lineno=node.lineno, column=node.col)
 
     def visit_class(self, node, void):
         assert void == True
@@ -1544,13 +1565,16 @@ def make_globals(lib, std_globals=True):
     glob = Globals()
     for pack, name in lib.get_public_names():
         if pack == '':
-            glob.namespace[name] = Class(lib.get_class(pack, name))
+            try:
+                glob.namespace[name] = Class(lib.get_class(pack, name))
+            except library.ClassNotFoundError:
+                prop = Property(abc.QName(abc.NSPackage(''), name))
+                glob.namespace[name] = prop
     if std_globals:
         glob.namespace['str'] = Class(lib.get_class('', 'String'))
         glob.namespace['float'] = Class(lib.get_class('', 'Number'))
         glob.namespace['list'] = Class(lib.get_class('', 'Array'))
         glob.namespace['bool'] = Class(lib.get_class('', 'Boolean'))
-        glob.namespace['isNaN'] = Property(abc.QName(abc.NSPackage(''), 'isNaN'))
     return glob
 
 def compile(files, lib, glob, output, main_class,

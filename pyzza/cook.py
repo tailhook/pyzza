@@ -131,6 +131,7 @@ def update_dependencies(dependencies, recipe):
                 if i in needed:
                     for val in needed[i]:
                         val['depends'].add(fullname)
+                    del needed[i]
         deps = set(info.get('depends', ()))
         for i in info.get('imports', ()):
             if i in exists:
@@ -186,6 +187,9 @@ def update_dependencies(dependencies, recipe):
                     adddeps(info)
                     if not needed:
                         break
+    if needed:
+        for name in needed:
+            warnings.warn("Name `{0}:{1}' not found".format(*name))
     # Removing unneeded dependencies using Mark and Sweep :) algorithm
     queue = deque()
     alldeps = set()

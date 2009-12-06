@@ -4,6 +4,8 @@ Implement verifier like one in Tamarin for the following:
     * add coerce only when needed
     * better stack size calculation (bad for ternary operator currently)
 Implement Vector type
+Fix tuples especially empty and single element ones
+Use prototypes to make class attributes behave more pythonic
 Implement try...finally
 Implement compilation of all node types (bitwise arithmetic, what else?)
 Implement loop primitives (zip, enumerate)

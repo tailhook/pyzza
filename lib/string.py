@@ -1,9 +1,3 @@
-#temporary hack
-from string import repr
-
-def maprepr(value, i, j):
-    return repr(value)
-
 @package('string')
 def repr(value):
     if isinstance(value, String):
@@ -36,6 +30,9 @@ def repr(value):
         for k, v in items(value):
             res.push(repr(k) + ': ' + repr(v))
         return '{' + res.join(', ') + '}'
+
+def maprepr(value, i, j):
+    return repr(value)
 
 single_re = RegExp(r"\{\{|\}\}|\{([^}!:]*)(![^:}]+)?(:[^}]*)?\}", "g")
 numformat_re = RegExp(r"^:([^}]?[<>=^])?(#?)([+]?)(\d*)(?:\.(\d+))?([bcdeEfFgGoxX%])$")
@@ -70,11 +67,14 @@ def format(pattern, *args):
                 val = repr(val)
             else:
                 raise Error("Wrong conversion " + repr(convers))
-        if val.__format__:
-            val = val.__format__(format)
-        else:
-            val = repr(val)
-        return val
+        try:
+            if val.__format__:
+                return val.__format__(format)
+        except ReferenceError:
+            pass
+        except TypeError:
+            pass
+        return repr(val)
     return pattern.replace(single_re, repl)
 
 digits = {

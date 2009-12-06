@@ -1,0 +1,23 @@
+Global:
+    libraries:
+        - /opt/flex34/frameworks/libs/player/10/playerglobal.swc
+    pyzza-path:
+        - arkanoid
+        - pacman
+        - charts
+        - ../lib
+
+Targets:
+    layout.swf:
+        main-class: layout.sample.Main
+        main-source: ../lib/layout/sample.py
+    arkanoid.swf:
+        main-class: arkanoid.Main
+        main-source: arkanoid/main.py
+        frame-rate: 60
+    pacman.swf:
+        main-class: pacman.Main
+        main-source: pacman/main.py
+    charts.swf:
+        main-class: charts.Main
+        main-source: charts/main.py
