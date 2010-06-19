@@ -1,5 +1,6 @@
 from flash.text.engine import (TextElement, ElementFormat, FontDescription,
     TextBlock)
+from graph import Colors
 
 @package('graph')
 class Drawer:
@@ -7,6 +8,14 @@ class Drawer:
         self.graph = graph
         self.sprite = sprite
         self.canvas = sprite.graphics
+
+    def color(self, value):
+        if not value:
+            return 0
+        if value.charAt(0) == '#':
+            return int('0x' + value.substring(1))
+        else:
+            return Colors.x11[value.toLowerCase()]
 
     def draw(self):
         for node in values(self.graph.nodes):
@@ -16,32 +25,35 @@ class Drawer:
             self.draw_edge(edge)
 
     def node_ellipse(self, node):
-        self.canvas.lineStyle(1, node.color)
         if node.style == 'filled':
-            self.canvas.beginFill(self.node.fillcolor)
-        self.canvas.drawEllipse(node.x, node.y, node.width*72, node.height*72)
+            self.canvas.beginFill(self.color(node.color))
+        else:
+            self.canvas.lineStyle(1, self.color(node.color))
+        self.canvas.drawEllipse(node.x-node.width*36, node.y-node.height*36,
+            node.width*72, node.height*72)
         if node.style == 'filled':
             self.canvas.endFill()
 
     def node_circle(self, node):
-        self.canvas.lineStyle(1, node.color)
         if node.style == 'filled':
-            self.canvas.beginFill(self.node.fillcolor)
+            self.canvas.beginFill(self.color(node.fillcolor))
+        else:
+            self.canvas.lineStyle(1, self.color(node.color))
         self.canvas.drawCircle(node.x, node.y, node.width*36)
         if node.style == 'filled':
             self.canvas.endFill()
 
     def node_doublecircle(self, node):
-        self.canvas.lineStyle(1, node.color)
+        self.canvas.lineStyle(1, self.color(node.color))
         self.canvas.drawCircle(node.x, node.y, node.width*36)
         if node.style == 'filled':
-            self.canvas.beginFill(self.node.fillcolor)
+            self.canvas.beginFill(self.color(node.fillcolor))
         self.canvas.drawCircle(node.x, node.y, node.width*36 - 4)
         if node.style == 'filled':
             self.canvas.endFill()
 
     def draw_edge(self, edge):
-        self.canvas.lineStyle(1, edge.color)
+        self.canvas.lineStyle(1, self.color(edge.color))
         if self.startpoint:
             self.canvas.moveTo(edge.startpoint.x, edge.startpoint.y)
             self.canvas.lineTo(edge.path[0].x, edge.path[0].y)
@@ -53,7 +65,7 @@ class Drawer:
                 (edge.path[i].y+edge.path[i+1].y)*0.5)
             self.canvas.curveTo(edge.path[i+1].x, edge.path[i+1].y,
                 edge.path[i+2].x, edge.path[i+2].y)
-        self['arrow_' + edge.arrowhead](edge.color,
+        self['arrow_' + edge.arrowhead](self.color(edge.color),
             edge.path[edge.path.length-1], edge.endpoint)
 
     def arrow_normal(self, color, center, end):

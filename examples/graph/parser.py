@@ -73,6 +73,7 @@ for i in range(alnum.length):
     token_chars[alnum.charAt(i)] = TokenName
 escapes = {
     'n': '\n',
+    'N': '', # probably means nothing
     'r': '\r',
     '\\': '\\',
     '"': '"',
@@ -139,9 +140,10 @@ class Tokenizer:
                 ch1 = data.charAt(self.index)
                 self.index += 1
                 if ch1 == '\\':
-                    if self.index < data.length:
+                    if self.index >= data.length:
                         self.syntax_error()
                     res += escapes[data.charAt(self.index)]
+                    self.index += 1
                 elif ch1 == ch:
                     return TokenString(res)
                 elif ch1 == '\r' or ch1 == '\n':
@@ -205,7 +207,7 @@ class Parser:
         pass
 
     def parse(self, data):
-        self.tokenizer = Tokenizer(data)
+        self.tokenizer = Tokenizer(data.replace('\r\n', '\n'))
         return self.parse_graph()
 
     # parser state functions
