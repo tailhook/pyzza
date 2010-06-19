@@ -18,6 +18,8 @@ def repr(value):
         return 'null'
     elif value == undefined:
         return 'undefined'
+    elif isinstance(value, Class):
+        return value.toString()
     elif isinstance(value, Object):
         try:
             if value.__repr__:

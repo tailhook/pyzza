@@ -347,7 +347,7 @@ class NameCheck:
     def visit_assign(self, node):
         if isinstance(node.target, parser.Name):
             if node.target.value == '__slots__':
-                assert isinstance(node.expr, parser.Tuple)
+                assert isinstance(node.expr, (parser.Tuple, parser.ListMaker)), node.expr
                 assert all(isinstance(n, parser.String) for n in node.expr)
                 self.slots = tuple(map(attrgetter('value'), node.expr))
             self.localnames.add(node.target.value)
@@ -971,6 +971,17 @@ class CodeFragment:
                 if void:
                     self.bytecodes.append(bytecode.pop())
         else:
+            if isinstance(name, parser.Call) and name.expr.value == 'Class'\
+                and len(name.arguments) == 1:
+                self.push_value(name.arguments[0])
+                self.bytecodes.append(bytecode.coerce(
+                    abc.QName(abc.NSPackage(''), 'Class')))
+                for i in node.arguments:
+                    self.push_value(i)
+                self.bytecodes.append(bytecode.construct(len(node.arguments)))
+                if void:
+                    self.bytecodes.append(bytecode.pop())
+                return
             self.push_value(node.expr)
             self.bytecodes.append(bytecode.pushnull())
             for i in node.arguments:

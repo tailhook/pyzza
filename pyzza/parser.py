@@ -127,8 +127,12 @@ class Op(Leaf):
 class Return(Node):
     __slots__ = ('expr',)
     def __init__(self, children, context):
-        _return, self.expr = children
-        assert _return.value == 'return', _return
+        if len(children) < 2:
+            assert children[0].value == 'return', children[0].value
+            self.expr = Name('None', context)
+        else:
+            _return, self.expr = children
+            assert _return.value == 'return', _return
         super().__init__(context)
     @property
     def children(self):
