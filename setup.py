@@ -3,7 +3,7 @@ import glob
 
 setup(
     name = "pyzza",
-    version = "0.1",
+    version = "0.2",
 
     packages = ['pyzza'],
     scripts = [
@@ -26,6 +26,14 @@ setup(
     author_email = "pc@gafol.net",
     description = 'Pyzza is a compiler of a python-like programming language'
         'targeting Flash platform',
+    classifiers = [
+        'Development Status :: 4 - Beta',
+        'Intended Audience :: Developers',
+        'License :: OSI Approved :: MIT License',
+        'Programming Language :: Python',
+        'Programming Language :: Python :: 3',
+        'Environment :: Console',
+        ],
     license = "MIT",
     keywords = "flash pyzza",
     url = "http://www.mr-pc.kiev.ua/en/projects/Pyzza",
