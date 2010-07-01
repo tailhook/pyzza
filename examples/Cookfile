@@ -1,10 +1,11 @@
 Global:
     libraries:
-        - /opt/flex34/frameworks/libs/player/10/playerglobal.swc
+        - /opt/flex-sdk/frameworks/libs/player/10.0/playerglobal.swc
     pyzza-path:
         - arkanoid
         - pacman
         - charts
+        - graph
         - ../lib
 
 Targets:
@@ -21,3 +22,6 @@ Targets:
     charts.swf:
         main-class: charts.Main
         main-source: charts/main.py
+    graph.swf:
+        main-class: graph.Main
+        main-source: graph/main.py
