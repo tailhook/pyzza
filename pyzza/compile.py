@@ -118,13 +118,16 @@ class CodeHeader:
             if k == '__init__': continue
             if isinstance(m, Method):
                 flag = 0
+                disp_id = 0
                 for b in bases:
-                    if b.has_method(k):
-                        flag = abc.TraitsInfo.ATTR_Override
+                    basetrait = b.get_method_trait(k)
+                    if basetrait is not None:
+                        #~ flag = abc.TraitsInfo.ATTR_Override
+                        disp_id = basetrait.disp_id
                         break
                 traits.append(abc.TraitsInfo(
                     abc.QName(abc.NSPackage(''), k),
-                    abc.TraitMethod(m.code_fragment._method_info),
+                    abc.TraitMethod(m.code_fragment._method_info, disp_id),
                     attr=flag))
         if slots:
             sealed = True
