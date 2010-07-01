@@ -119,14 +119,15 @@ class CodeHeader:
             if isinstance(m, Method):
                 flag = 0
                 disp_id = 0
+                fullname = abc.QName(m.namespace, k)
                 for b in bases:
-                    basetrait = b.get_method_trait(k)
+                    basetrait = b.get_method_trait(fullname)
                     if basetrait is not None:
-                        #~ flag = abc.TraitsInfo.ATTR_Override
+                        flag = abc.TraitsInfo.ATTR_Override
                         disp_id = basetrait.disp_id
                         break
                 traits.append(abc.TraitsInfo(
-                    abc.QName(abc.NSPackage(''), k),
+                    fullname,
                     abc.TraitMethod(m.code_fragment._method_info, disp_id),
                     attr=flag))
         if slots:
@@ -219,8 +220,9 @@ class ClosureSlot(NameType):
 
 class Method(NameType):
     """Method (for class namespace)"""
-    def __init__(self, frag):
+    def __init__(self, frag, namespace=abc.NSPackage('')):
         self.code_fragment = frag
+        self.namespace = namespace
 
 class ClassMethod(NameType):
     """Class method (for class namespace)"""
@@ -745,12 +747,15 @@ class CodeFragment:
         if self.mode == 'class_body':
             classmethod = False
             staticmethod = False
+            methodns = abc.NSPackage('')
             if node.decorators:
                 for i in node.decorators:
                     if i.name.value == 'classmethod':
                         classmethod = True
                     elif i.name.value == 'staticmethod':
                         staticmethod = True
+                    elif i.name.value == 'nsuser':
+                        methodns = abc.NSUser(i.arguments[0].value)
                     else:
                         raise NotImplementedError("No decorator ``{0}''"
                             .format(i.name))
@@ -766,7 +771,7 @@ class CodeFragment:
             if classmethod or staticmethod:
                 self.namespace[node.name.value] = ClassMethod(frag)
             else:
-                self.namespace[node.name.value] = Method(frag)
+                self.namespace[node.name.value] = Method(frag, methodns)
             self.code_header.add_method_body(
                 '{0}/{1}'.format(self.class_name.value, node.name.value),
                 frag, node.arguments)

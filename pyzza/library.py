@@ -141,5 +141,5 @@ class AS3Class:
     def get_method_trait(self, name):
         for t in self.class_info.instance_info.trait:
             if isinstance(t.data, abc.TraitMethod) \
-                and t.name.name == name:
+                and t.name == name:
                 return t.data
