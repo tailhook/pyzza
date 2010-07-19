@@ -3,6 +3,7 @@ from operator import methodcaller, attrgetter, itemgetter
 from collections import defaultdict
 from contextlib import contextmanager
 import copy
+import sys
 
 from . import parser, library, swf, bytecode, abc, tags
 
@@ -1601,7 +1602,10 @@ def compile(files, lib, glob, output, main_class,
     code_tags = []
     try:
         for file in files:
-            ast = parser.parser().parse_file(file)
+            if file == '-':
+                ast = parser.parser().parse_stream(sys.stdin)
+            else:
+                ast = parser.parser().parse_file(file)
             code_header = CodeHeader(file)
             NameCheck(ast) # fills closure variable names
             frag = CodeFragment(ast, lib, code_header, filename=file,
@@ -1619,8 +1623,11 @@ def compile(files, lib, glob, output, main_class,
         tags.SymbolClass(main_class=main_class),
         tags.ShowFrame(),
         ]
-    with open(output, 'wb') as o:
-        h.write_swf(o, b''.join(map(methodcaller('blob'), content)))
+    if hasattr(output, 'write'):
+        h.write_swf(output, b''.join(map(methodcaller('blob'), content)))
+    else:
+        with open(output, 'wb') as o:
+            h.write_swf(o, b''.join(map(methodcaller('blob'), content)))
 
 def main():
     global options
@@ -1635,7 +1642,9 @@ def main():
     if options.output:
         out = options.output
     else:
-        if args[0].endswith('.py'):
+        if args[0] == '-':
+            out = sys.stdout.buffer
+        elif args[0].endswith('.py'):
             out = args[0][:-3] + '.swf'
         else:
             out = args[0] + '.swf'

@@ -809,6 +809,13 @@ class Parser(driver.Driver):
             _, (line, col) = e.context
             raise SyntaxError(filename=filename, lineno=line, column=col)
 
+    def parse_stream(self, stream):
+        try:
+            return super().parse_stream(stream)
+        except pgen2.parse.ParseError as e:
+            _, (line, col) = e.context
+            raise SyntaxError(filename=filename, lineno=line, column=col)
+
 
 def parser():
     driv = Parser(grammar, convert=convert)
