@@ -802,16 +802,10 @@ def convert(gr, raw_node):
         raise NotImplementedError(token.tok_name[type])
 
 class Parser(driver.Driver):
-    def parse_file(self, filename):
-        try:
-            return super().parse_file(filename)
-        except pgen2.parse.ParseError as e:
-            _, (line, col) = e.context
-            raise SyntaxError(filename=filename, lineno=line, column=col)
 
-    def parse_stream(self, stream):
+    def parse_stream(self, stream, debug=False):
         try:
-            return super().parse_stream(stream)
+            return super().parse_stream(stream, debug=debug)
         except pgen2.parse.ParseError as e:
             _, (line, col) = e.context
             raise SyntaxError(filename=filename, lineno=line, column=col)
