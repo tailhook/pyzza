@@ -104,10 +104,14 @@ class CodeHeader:
                     abc.TraitSlot(),
                     attr=0))
             elif isinstance(m, ClassMethod):
-                traits.append(abc.TraitsInfo(
+                trait = abc.TraitsInfo(
                     abc.QName(abc.NSPackage(''), k),
                     abc.TraitMethod(m.code_fragment._method_info),
-                    attr=0))
+                    attr=0)
+                if m.code_fragment.metadata:
+                    trait.metadata = [abc.MetadataInfo('pyzza')]
+                    trait.metadata[0].item_info.update(m.code_fragment.metadata)
+                traits.append(trait)
         cls.trait = traits
         inst.name = abc.QName(package, name)
         inst.super_name = bases[0].name
@@ -127,10 +131,14 @@ class CodeHeader:
                         flag = abc.TraitsInfo.ATTR_Override
                         disp_id = basetrait.disp_id
                         break
-                traits.append(abc.TraitsInfo(
+                trait = abc.TraitsInfo(
                     fullname,
                     abc.TraitMethod(m.code_fragment._method_info, disp_id),
-                    attr=flag))
+                    attr=flag)
+                if m.code_fragment.metadata:
+                    trait.metadata = [abc.MetadataInfo('pyzza')]
+                    trait.metadata[0].item_info.update(m.code_fragment.metadata)
+                traits.append(trait)
         if slots:
             sealed = True
             for (index, k) in enumerate(slots):
@@ -474,6 +482,8 @@ class CodeFragment:
             varargument=None,
             filename=None,
             classmethod=False,
+            metadata={},
+            myclass=None,
             ):
         self.library = library
         self.code_header = code_header
@@ -512,6 +522,8 @@ class CodeFragment:
         self.loopstack = [] # pairs of continue label and break label
         # extra registers used for computations
         # keyed by register type
+        self.method_name = getattr(ast, 'name', self.qname('__global__'))
+        self.myclass = myclass
         self.classmethod = classmethod
         self.extra_registers = defaultdict(list)
         self.exceptions = []
@@ -521,6 +533,7 @@ class CodeFragment:
         self.varargument = varargument
         self.filename = filename
         self.current_line = None
+        self.metadata = metadata
         for (i, v) in enumerate(chain(arguments, (varargument,))):
             if v in ast.func_export:
                 self.bytecodes.append(bytecode.getlocal(
@@ -748,6 +761,7 @@ class CodeFragment:
         if self.mode == 'class_body':
             classmethod = False
             staticmethod = False
+            metadata = {}
             methodns = abc.NSPackage('')
             if node.decorators:
                 for i in node.decorators:
@@ -755,6 +769,11 @@ class CodeFragment:
                         classmethod = True
                     elif i.name.value == 'staticmethod':
                         staticmethod = True
+                    elif i.name.value == 'debuglevel':
+                        metadata['debuglevel'] = i.arguments[0].value
+                    elif i.name.value == 'debuginfo':
+                        metadata['debuginfo'] = ','.join(arg.value
+                            for arg in i.arguments)
                     elif i.name.value == 'nsuser':
                         methodns = abc.NSUser(i.arguments[0].value)
                     else:
@@ -768,6 +787,8 @@ class CodeFragment:
                 varargument=vararg,
                 filename=self.filename,
                 classmethod=classmethod,
+                metadata=metadata,
+                myclass=self,
                 )
             if classmethod or staticmethod:
                 self.namespace[node.name.value] = ClassMethod(frag)
@@ -1057,18 +1078,55 @@ class CodeFragment:
         else:
             raise NotImplementedError(node)
 
+    def _get_meta(self, node):
+        if isinstance(node.expr, parser.Name):
+            obj = self.find_name(node.expr.value, node.expr)
+            if isinstance(obj, (Class, NewClass)):
+                qname = self.qname(node.attribute.value)
+                trait = obj.class_info.get_method_trait(qname, raw_trait=True)
+                if hasattr(trait, 'metadata'):
+                    for m in trait.metadata:
+                        if m.name != 'pyzza': continue
+                        return m
+
     def visit_callattr(self, node, void):
+        meta = self._get_meta(node)
+        if meta and 'debuglevel' in meta.item_info and False: # TOFIX
+            if not void:
+                self.bytecodes.append(bytecode.pushint())
+            return
         self.push_value(node.expr)
+        nargs = len(node.arguments)
+        if meta and 'debuginfo' in meta.item_info:
+            loginfo = meta.item_info['debuginfo'].split(',')
+            for name in loginfo:
+                if name == 'line':
+                    self.bytecodes.append(bytecode.pushint(node.lineno))
+                    nargs += 1
+                elif name == 'file':
+                    self.bytecodes.append(bytecode.pushstring(self.filename))
+                    nargs += 1
+                elif name == 'class':
+                    self.bytecodes.append(bytecode.pushstring(
+                        self.myclass.class_name.value
+                        if self.myclass else ''))
+                    nargs += 1
+                elif name == 'method':
+                    self.bytecodes.append(bytecode.pushstring(
+                        self.method_name.value))
+                    nargs += 1
+                else:
+                    raise ValueError(name)
         for i in node.arguments:
             self.push_value(i)
         if void:
             self.bytecodes.append(bytecode.callpropvoid(
                 self.qname(node.attribute.value),
-                len(node.arguments)))
+                nargs))
         else:
             self.bytecodes.append(bytecode.callproperty(
                 self.qname(node.attribute.value),
-                len(node.arguments)))
+                nargs))
 
     def visit_getattr(self, node, void):
         if void: return

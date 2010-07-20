@@ -6,6 +6,7 @@ Global:
         - pacman
         - charts
         - graph
+        - debuginfo
         - ../lib
 
 Targets:
@@ -25,3 +26,6 @@ Targets:
     graph.swf:
         main-class: graph.Main
         main-source: graph/main.py
+    debuginfo.swf:
+        main-class: debuginfo.Main
+        main-source: debuginfo/main.py

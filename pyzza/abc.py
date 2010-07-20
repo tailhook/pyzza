@@ -1,7 +1,7 @@
 import struct
 import copy
 from operator import itemgetter
-from collections import defaultdict
+from collections import defaultdict, OrderedDict as ordereddict
 
 from .tags import Tag, TAG_DoABC
 from .io import DummyABCStream, ABCStream, uint
@@ -392,8 +392,8 @@ class TraitsInfo(ABCStruct):
         self.data.write(stream, index)
         if hasattr(self, 'metadata'):
             stream.write_u30(len(self.metadata))
-            for m in self.metadata:
-                stream.write_u30(index.get_metadata_index(m))
+            for tup in self.metadata:
+                stream.write_u30(index.get_metadata_index(tup))
 
     def __repr__(self):
         return '<Trait {0}:{1} {2}>'.format(self.name, self.kind, self.data)
@@ -450,20 +450,23 @@ class ScriptInfo(ABCStruct):
 
 class MetadataInfo(ABCStruct):
 
+    def __init__(self, name, items=()):
+        self.name = name
+        self.item_info = ordereddict(items)
+
     @classmethod
     def read(cls, stream, index):
-        self = cls()
-        self.name = index.get_string(stream.read_u30())
+        self = cls(index.get_string(stream.read_u30()))
         item_count = stream.read_u30()
-        self.item_info = [(index.get_string(stream.read_u30()),
+        self.item_info = ordereddict((index.get_string(stream.read_u30()),
             index.get_string(stream.read_u30()))
-            for i in range(item_count)]
+            for i in range(item_count))
         return self
 
     def write(self, stream, index):
         stream.write_u30(index.get_string_index(self.name))
         stream.write_u30(len(self.item_info))
-        for (k, v) in self.item_info:
+        for (k, v) in self.item_info.items():
             stream.write_u30(index.get_string_index(k))
             stream.write_u30(index.get_string_index(v))
 
@@ -995,6 +998,7 @@ class IndexCreator(object):
 
     def get_metadata_index(self, value):
         self.metadata[value] += 1
+        value.write(DummyABCStream(), self)
         return 0
 
     def for_method(self, method):

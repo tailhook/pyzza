@@ -138,8 +138,18 @@ class AS3Class:
             return None
         return lib.get_class(sn.namespace.name, sn.name)
 
-    def get_method_trait(self, name):
+    def get_method_trait(self, name, raw_trait=False):
         for t in self.class_info.instance_info.trait:
             if isinstance(t.data, abc.TraitMethod) \
                 and t.name == name:
-                return t.data
+                if raw_trait:
+                    return t
+                else:
+                    return t.data
+        for t in self.class_info.trait:
+            if isinstance(t.data, abc.TraitMethod) \
+                and t.name == name:
+                if raw_trait:
+                    return t
+                else:
+                    return t.data
