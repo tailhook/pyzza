@@ -101,8 +101,18 @@ def _makedeps(fullname):
     if ext == '.py':
         try:
             ast = parser.parser().parse_file(fullname)
+        except parser.SyntaxError as e:
+            try:
+                if options.verbosity > 1:
+                    from .compile import print_error
+                    print_error(e)
+            except (NameError, ImportError):
+                raise
+            warnings.warn("Syntax error in file {!r}".format(fullname))
+            return
         except Exception:
             warnings.warn("File {!r} can't be parsed".format(fullname))
+            raise
             return
         imports, exports = visit(ast)
         return {
@@ -261,6 +271,7 @@ def make(recipe, dependencies, force=False, verbosity=0):
                 .format(name))
 
 def main():
+    global options
     op = get_options()
     options, args = op.parse_args()
     if args:

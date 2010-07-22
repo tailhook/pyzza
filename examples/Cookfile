@@ -27,5 +27,6 @@ Targets:
         main-class: graph.Main
         main-source: graph/main.py
     debuginfo.swf:
+        frame-rate: 30
         main-class: debuginfo.Main
         main-source: debuginfo/main.py

@@ -1631,12 +1631,15 @@ def get_options():
 def print_error(e):
     print("{error.__class__.__name__} at line {lineno} column {column} "\
         "of file {filename!r}:".format(error=e, **e.context))
-    with open(e.context['filename'], 'rt', encoding='utf-8') as f:
-        for (no, line) in islice(zip(count(1), f),
-            max(e.context['lineno']-5, 0), e.context['lineno']+4):
-            print('{0:4d}  {1}'.format(no, line.rstrip()))
-            if no == e.context['lineno']:
-                print(' ' * (e.context['column']+6) + '^')
+    try:
+        with open(e.context['filename'], 'rt', encoding='utf-8') as f:
+            for (no, line) in islice(zip(count(1), f),
+                max(e.context['lineno']-5, 0), e.context['lineno']+4):
+                print('{0:4d}  {1}'.format(no, line.rstrip()))
+                if no == e.context['lineno']:
+                    print(' ' * (e.context['column']+6) + '^')
+    except IOError:
+        pass
     print("{0.__class__.__name__}: {0.message}".format(e))
 
 def make_globals(lib, std_globals=True):
@@ -1661,7 +1664,7 @@ def compile(files, lib, glob, output, main_class,
     try:
         for file in files:
             if file == '-':
-                ast = parser.parser().parse_stream(sys.stdin)
+                ast = parser.parser().parse_stream(sys.stdin, name='<stdin>')
             else:
                 ast = parser.parser().parse_file(file)
             code_header = CodeHeader(file)

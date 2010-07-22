@@ -677,6 +677,7 @@ def Trailered(child, ctx):
 tokens = {
     token.INDENT: Nop,
     token.NEWLINE: Nop,
+    token.SEMI: Nop,
     token.LPAR: Nop,
     token.RPAR: Nop,
     token.AT: Nop,
@@ -803,12 +804,16 @@ def convert(gr, raw_node):
 
 class Parser(driver.Driver):
 
-    def parse_stream(self, stream, debug=False):
+    def parse_file(self, filename, debug=False, encoding='utf-8'):
+        with open(filename, 'rt', encoding=encoding) as file:
+            return self.parse_stream(file, debug=debug, name=filename)
+
+    def parse_stream(self, stream, debug=False, name='<stream>'):
         try:
             return super().parse_stream(stream, debug=debug)
         except pgen2.parse.ParseError as e:
             _, (line, col) = e.context
-            raise SyntaxError(filename=filename, lineno=line, column=col)
+            raise SyntaxError(filename=name, lineno=line, column=col)
 
 
 def parser():

@@ -1,6 +1,7 @@
 from string import repr
 from flash.text import TextField
-from flash.display import Sprite
+from flash.display import Sprite, StageAlign, StageScaleMode
+from logging import Log, Console
 
 class Holder:
     textbox = None
@@ -8,7 +9,7 @@ class Holder:
         pass
 
 @package('debuginfo')
-class Log:
+class MyLog:
 
     def __init__(self):
         pass
@@ -23,9 +24,15 @@ class Log:
 @package('debuginfo')
 class Main(Sprite):
     def __init__(self):
+        self.stage.align = StageAlign.TOP_LEFT
+        self.stage.scaleMode = StageScaleMode.NO_SCALE
         self.tf = TextField()
         Holder.textbox = self.tf
         self.addChild(self.tf)
         self.tf.width = 640
         self.tf.height = 480
-        Log.warning("hello")
+        MyLog.warning("My Warning Function Called")
+        Log.add_handler(Console(self))
+        Log.info("Some info message")
+        Log.warning("Some warning")
+        Log.error("Some error message")
