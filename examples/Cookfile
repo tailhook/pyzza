@@ -8,6 +8,7 @@ Global:
         - graph
         - debuginfo
         - ../lib
+    debug-filename: basename
 
 Targets:
     layout.swf:

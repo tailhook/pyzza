@@ -3,7 +3,7 @@ import glob
 
 setup(
     name = "pyzza",
-    version = "0.2.5",
+    version = "0.2.6",
 
     packages = ['pyzza'],
     scripts = [

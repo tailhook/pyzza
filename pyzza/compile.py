@@ -4,6 +4,7 @@ from collections import defaultdict
 from contextlib import contextmanager
 import copy
 import sys
+import os.path
 
 from . import parser, library, swf, bytecode, abc, tags
 
@@ -1626,6 +1627,10 @@ def get_options():
     op.add_option('-f', '--frame-rate', metavar="FPS",
         help="Frame rate of output flash movie",
         dest="frame_rate", default=15, type="int")
+    op.add_option('--debug-filename', metavar="MODE",
+        help="How to put filename into debugging info. `full` - full path, "
+             " `basename` - filename without path",
+        dest="frame_rate", default=15, type="int")
     return op
 
 def print_error(e):
@@ -1659,7 +1664,7 @@ def make_globals(lib, std_globals=True):
     return glob
 
 def compile(files, lib, glob, output, main_class,
-        width=500, height=375, frame_rate=15):
+        width=500, height=375, frame_rate=15, filename='full'):
     code_tags = []
     try:
         for file in files:
@@ -1669,7 +1674,11 @@ def compile(files, lib, glob, output, main_class,
                 ast = parser.parser().parse_file(file)
             code_header = CodeHeader(file)
             NameCheck(ast) # fills closure variable names
-            frag = CodeFragment(ast, lib, code_header, filename=file,
+            if filename == 'basename':
+                fname = os.path.basename(file)
+            else:
+                fname = file
+            frag = CodeFragment(ast, lib, code_header, filename=fname,
                 parent_namespaces=(glob,))
             code_header.add_method_body('', frag)
             code_header.add_main_script(frag)
