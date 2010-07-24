@@ -872,6 +872,59 @@ World!"""), r'"Hello\nWorld!"')
         self.assertEquals('{:0=#5x}'.format(-18), '-0x12')
         self.assertEquals('{:#6x}'.format(-18), ' -0x12')
 
+class Eval(Test):
+    def __init__(self, reporter, name):
+        super().__init__(reporter, name)
+
+    def test(self):
+        self.testEval()
+
+    def testEval(self):
+
+        @__eval__
+        def test1(_):
+            a = 1
+            b = 3
+            (a+b)*a
+
+        @__eval__
+        def test2(_):
+            c = a+b
+            c*2
+
+        @__eval__
+        def test3(_):
+            def fun(arg):
+                return arg*2
+            fun(3)
+
+        @__eval__
+        def test4(_):
+            fun(a+b)
+
+        @__eval__
+        def test5(_):
+            def fun2():
+                return _*2
+            fun2()
+
+        @__eval__
+        def test6(_):
+            fun2()
+
+        scope = {}
+        val = test1.apply(scope, [val])
+        self.assertEquals(val, 4)
+        val = test2.apply(scope, [val])
+        self.assertEquals(val, 8)
+        val = test3.apply(scope, [val])
+        self.assertEquals(val, 6)
+        val = test4.apply(scope, [val])
+        self.assertEquals(val, 8)
+        val = test5.apply(scope, [val])
+        self.assertEquals(val, 16)
+        val = test6.apply(scope, [val])
+        self.assertEquals(val, 32)
 
 @package('')
 class Main(Sprite):
@@ -902,4 +955,5 @@ class Main(Sprite):
         TestClass(self.reporter, 'Classes').run()
         Functions(self.reporter, 'Functions').run()
         Utility(self.reporter, 'Utility').run()
+        Eval(self.reporter, 'Eval').run()
         self.reporter.finish()

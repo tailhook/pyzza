@@ -1,6 +1,6 @@
 Global:
     libraries:
-        - library.swf
+        - /opt/flex-sdk/frameworks/libs/player/10.0/playerglobal.swc
     pyzza-path:
         - "."
         - "../lib"

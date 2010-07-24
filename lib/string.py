@@ -30,8 +30,10 @@ def repr(value):
             return '<Instance of ' + value.constructor.toString() + '>'
         res = []
         for k, v in items(value):
-            res.push(repr(k) + ': ' + repr(v))
+            res.push(_repr(k) + ': ' + _repr(v))
         return '{' + res.join(', ') + '}'
+
+_repr = repr # helps problems with namespaces
 
 def maprepr(value, i, j):
     return repr(value)

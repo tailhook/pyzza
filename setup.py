@@ -3,7 +3,7 @@ import glob
 
 setup(
     name = "pyzza",
-    version = "0.2.6",
+    version = "0.2.7",
 
     packages = ['pyzza'],
     scripts = [
@@ -24,8 +24,8 @@ setup(
     # metadata for upload to PyPI
     author = "Paul Colomiets",
     author_email = "pc@gafol.net",
-    description = 'Pyzza is a compiler of a python-like programming language'
-        'targeting Flash platform',
+    description = 'Pyzza is a compiler of a python-like programming language, '
+        'targeting the Flash platform',
     classifiers = [
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
@@ -36,6 +36,6 @@ setup(
         ],
     license = "MIT",
     keywords = "flash pyzza",
-    url = "http://www.mr-pc.kiev.ua/en/projects/Pyzza",
+    url = "http://pyzza.gafol.net",
     requires = 'pyyaml',
 )

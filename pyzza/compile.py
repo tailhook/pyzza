@@ -193,6 +193,9 @@ class Property(NameType):
     def __repr__(self):
         return '<{0} {1!r}>'.format(self.__class__.__name__, self.property_name)
 
+class LocalProperty(Property):
+    """Property of a local namespace (for eval mode)"""
+
 class Class(Property):
     """Imported class"""
     def __init__(self, cls):
@@ -472,13 +475,18 @@ class CodeFragment:
         parser.ListMaker: 'list',
         parser.DictMaker: 'dict',
         }
+    statement_nodes = (
+        parser.ImportStmt, parser.Class, parser.Func, parser.Assign,
+        parser.Del, parser.Return, parser.Raise, parser.If, parser.For,
+        parser.While, parser.Try, parser.Break, parser.Continue,
+        )
     max_stack = None
     local_count = None
     scope_stack_init = 0 # TODO: fix
     scope_stack_max = 10 # TODO: fix
     def __init__(self, ast, library, code_header,
             parent_namespaces,
-            mode="global",
+            mode="global", #class_body, method, function, eval
             arguments=(None,),
             varargument=None,
             filename=None,
@@ -499,6 +507,11 @@ class CodeFragment:
             assert not ast.func_export
             self.namespace = {k: Property(abc.QName(abc.NSPackage(''),k))
                 for k in ast.func_locals}
+        elif mode == 'eval':
+            self.bytecodes.append(bytecode.getlocal_0())
+            self.bytecodes.append(bytecode.pushwith())
+            self.namespace = {k: LocalProperty(abc.QName(abc.NSPackage(''),k))
+                for k in ast.func_locals}
         else:
             self.namespace = {k: Register() for k in ast.func_locals
                 if k not in ast.func_export}
@@ -517,6 +530,9 @@ class CodeFragment:
                 self.bytecodes.append(bytecode.setlocal(self.activation))
                 self.namespace.update((k, ClosureSlot(idx+1, k))
                     for (idx, k) in enumerate(ast.func_export))
+            elif mode == 'eval':
+                pass
+                # no registers anyway
             else:
                 raise NotImplementedError(mode)
 
@@ -536,18 +552,24 @@ class CodeFragment:
         self.current_line = None
         self.metadata = metadata
         for (i, v) in enumerate(chain(arguments, (varargument,))):
-            if v in ast.func_export:
+            if mode == 'eval' and v is not None:
+                self.bytecodes.append(bytecode.getlocal_0())
+                self.bytecodes.append(bytecode.getlocal(Register(i)))
+                self.bytecodes.append(bytecode.setproperty(self.qname(v)))
+            elif v in ast.func_export:
                 self.bytecodes.append(bytecode.getlocal(
                     self.activation))
                 self.bytecodes.append(bytecode.getlocal(Register(i)))
-                self.bytecodes.append(bytecode.setslot(self.namespace[v].index))
+                self.bytecodes.append(bytecode.setslot(
+                    self.namespace[v].index))
             else:
                 self.namespace[v] = Register(i)
         if self.classmethod:
             self.namespace[arguments[0]] = ClsRegister(0)
         for args in ast.func_publicnames:
             self.library.add_name(*args)
-        self.exec_suite(ast.body if hasattr(ast, 'body') else ast)
+        self.exec_suite(ast.body if hasattr(ast, 'body') else ast,
+            eval=mode == 'eval')
         self.bytecodes.append(bytecode.returnvoid())
         self.fix_registers()
         self.verify_stack()
@@ -632,7 +654,15 @@ class CodeFragment:
         finally:
             self.current_line = oldline
 
-    def exec_suite(self, suite):
+    def exec_suite(self, suite, eval=False):
+        if eval:
+            if not isinstance(suite[-1], self.statement_nodes):
+                val = suite[-1]
+                suite = suite[:-1]
+                context = ('', (val.lineno, val.col))
+                suite.append(parser.Return([
+                    parser.Leaf("return", context),
+                    val], context))
         for line in suite:
             self.execute(line)
 
@@ -641,8 +671,12 @@ class CodeFragment:
             if name in ns.namespace:
                 break
         else:
-            raise NameError(name, filename=self.filename,
-                lineno=node.lineno, column=node.col)
+            if self.mode == 'eval':
+                self.namespace[name] = LocalProperty(self.qname(name))
+                ns = self
+            else:
+                raise NameError(name, filename=self.filename,
+                    lineno=node.lineno, column=node.col)
         return ns.namespace[name]
 
     def qname(self, name):
@@ -801,6 +835,7 @@ class CodeFragment:
         else:
             package = abc.NSPrivate(self.filename)
             method = False
+            mode = "function"
             if node.decorators:
                 for i in node.decorators:
                     if i.name.value == 'package':
@@ -809,11 +844,13 @@ class CodeFragment:
                         package = abc.NSPrivate(self.filename)
                     elif i.name.value == 'method':
                         method = True
+                    elif i.name.value == '__eval__':
+                        mode = 'eval'
                     else:
                         raise NotImplementedError("No decorator ``{0}''"
                             .format(i.name))
             frag = CodeFragment(node, self.library, self.code_header,
-                mode="function",
+                mode=mode,
                 parent_namespaces=(self,) + self.parent_namespaces,
                 arguments=([] if method else [None]) + list(
                     map(attrgetter('name.value'), args)),
@@ -825,7 +862,7 @@ class CodeFragment:
                 node.lineno, node.name.value),
                 frag, node.arguments)
             prop = self.namespace[node.name.value]
-            if isinstance(prop, Property):
+            if isinstance(prop, Property) and not isinstance(prop, LocalProperty):
                 prop.__class__ = NewFunction
                 prop.code = frag
                 prop.method_info = mbody.method
@@ -844,6 +881,41 @@ class CodeFragment:
                 self.bytecodes.append(bytecode.getlocal(self.activation))
                 if _swap:
                     self.bytecodes.append(bytecode.swap())
+            elif isinstance(reg, LocalProperty):
+                extra = self.get_extra_reg('*')
+                startlabel = bytecode.Label()
+                endtrylabel = bytecode.Label()
+                endcatchlabel = bytecode.Label()
+                excinfo = abc.ExceptionInfo()
+                excinfo.exc_from = startlabel
+                excinfo.exc_to = endtrylabel
+                excinfo.target = endtrylabel
+                excinfo.exc_type = self.qname("ReferenceError")
+                excinfo.var_name = None
+                self.exceptions.append(excinfo)
+                self.bytecodes.append(startlabel)
+                self.bytecodes.append(bytecode.findpropstrict(reg.name))
+                self.bytecodes.append(bytecode.setlocal(extra))
+                self.bytecodes.append(bytecode.jump(endcatchlabel))
+                self.bytecodes.append(endtrylabel)
+                self.bytecodes.append(bytecode.getlocal_0())
+                self.bytecodes.append(bytecode.pushscope())
+                self.bytecodes.append(bytecode.getlocal_0())
+                self.bytecodes.append(bytecode.pushwith())
+                self.bytecodes.append(bytecode.newcatch(excinfo))
+                self.bytecodes.append(bytecode.pop()) # some info
+                self.bytecodes.append(bytecode.pop()) # exception var
+
+                #~ self.bytecodes.append(bytecode.getlex(self.qname('trace')))
+                #~ self.bytecodes.append(bytecode.pushnull())
+                #~ self.bytecodes.append(bytecode.pushstring("Exception"))
+                #~ self.bytecodes.append(bytecode.call(1))
+                #~ self.bytecodes.append(bytecode.pop())
+
+                self.bytecodes.append(bytecode.getlocal_0())
+                self.bytecodes.append(bytecode.setlocal(extra))
+                self.bytecodes.append(endcatchlabel)
+                self.bytecodes.append(bytecode.getlocal(extra))
             elif isinstance(reg, Property):
                 self.bytecodes.append(bytecode.getscopeobject(0))
         elif isinstance(target, parser.GetAttr):
@@ -869,6 +941,10 @@ class CodeFragment:
                     self.bytecodes.append(bytecode.setlocal(reg))
                 elif isinstance(reg, ClosureSlot):
                     self.bytecodes.append(bytecode.setslot(reg.index))
+                elif isinstance(reg, LocalProperty):
+                    self.bytecodes.append(bytecode.setproperty(
+                        reg.property_name))
+                    self.free_extra_reg(extra, '*')
                 elif isinstance(reg, Property):
                     self.bytecodes.append(bytecode.initproperty(
                         reg.property_name))
@@ -1028,8 +1104,12 @@ class CodeFragment:
             if name in ns.namespace:
                 break
         else:
-            raise NameError(name, filename=self.filename,
-                lineno=node.lineno, column=node.col)
+            if self.mode == 'eval':
+                self.namespace[name] = LocalProperty(self.qname(name))
+                ns = self
+            else:
+                raise NameError(name, filename=self.filename,
+                    lineno=node.lineno, column=node.col)
         val = ns.namespace[name]
         if isinstance(val, bool):
             if val:
