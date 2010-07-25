@@ -1705,7 +1705,8 @@ def get_options():
     op.add_option('--debug-filename', metavar="MODE",
         help="How to put filename into debugging info. `full` - full path, "
              " `basename` - filename without path",
-        dest="frame_rate", default=15, type="int")
+        dest="debug_filenames", default="full", type="choice",
+        choices=("full", "basename"))
     return op
 
 def print_error(e):
@@ -1739,28 +1740,26 @@ def make_globals(lib, std_globals=True):
     return glob
 
 def compile(files, lib, glob, output, main_class,
-        width=500, height=375, frame_rate=15, filename='full'):
+        width=500, height=375, frame_rate=15, filenames='full'):
     code_tags = []
-    try:
-        for file in files:
-            if file == '-':
-                ast = parser.parser().parse_stream(sys.stdin, name='<stdin>')
-            else:
-                ast = parser.parser().parse_file(file)
-            code_header = CodeHeader(file)
-            NameCheck(ast) # fills closure variable names
-            if filename == 'basename':
-                fname = os.path.basename(file)
-            else:
-                fname = file
-            frag = CodeFragment(ast, lib, code_header, filename=fname,
-                parent_namespaces=(glob,))
-            code_header.add_method_body('', frag)
-            code_header.add_main_script(frag)
-            code_tags.append(code_header.make_tag())
-    except (parser.SyntaxError, SyntaxError) as e:
-        print_error(e)
-        return
+    for file in files:
+        if hasattr(file, 'read'):
+            ast = parser.parser().parse_stream(file, name=file.name)
+            fname = file.name
+        else:
+            ast = parser.parser().parse_file(file)
+            fname = file
+        code_header = CodeHeader(fname)
+        NameCheck(ast) # fills closure variable names
+        if filenames == 'basename':
+            fname = os.path.basename(fname)
+        else:
+            fname = fname
+        frag = CodeFragment(ast, lib, code_header, filename=fname,
+            parent_namespaces=(glob,))
+        code_header.add_method_body('', frag)
+        code_header.add_main_script(frag)
+        code_tags.append(code_header.make_tag())
     h = swf.Header(frame_size=(int(width*20), int(height*20)),
                    frame_rate=int(frame_rate*256))
     content = [tags.FileAttributes()] \
@@ -1793,10 +1792,17 @@ def main():
             out = args[0][:-3] + '.swf'
         else:
             out = args[0] + '.swf'
+    for i, val in enumerate(args):
+        if val == '-':
+            args[i] = sys.stdin.buffer
     glob = make_globals(lib, std_globals=options.std_globals)
-    compile(args, lib, glob, out, main_class=options.main_class,
-        width=options.width, height=options.height,
-        frame_rate=options.frame_rate)
+    try:
+        compile(args, lib, glob, out, main_class=options.main_class,
+            width=options.width, height=options.height,
+            frame_rate=options.frame_rate, filenames=options.debug_filenames)
+    except (parser.SyntaxError, SyntaxError) as e:
+        print_error(e)
+        return
 
 if __name__ == '__main__':
     from . import compile

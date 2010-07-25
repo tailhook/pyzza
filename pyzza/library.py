@@ -71,6 +71,13 @@ class Library:
         self.class_cache = {}
         self._names = {}
 
+    def copy(self):
+        res = Library()
+        res.code_headers = self.code_headers
+        res.class_cache.update(self.class_cache)
+        res._names.update(self._names)
+        return res
+
     def add_file(self, filename):
         self.code_headers.extend(LibCache(filename).code_headers)
 
@@ -80,6 +87,17 @@ class Library:
                 return head._names[package, name]
         else:
             raise PropertyNotFoundError(package, name)
+
+    def populate_cache(self):
+        for head in self.code_headers:
+            for (idx, cls) in enumerate(head.class_info):
+                qname = cls.instance_info.name
+                res = AS3Class(qname, self,
+                    class_info=cls,
+                    index=idx,
+                    header=head,
+                    )
+                self.class_cache[package, name] = res
 
     def get_class(self, package, name):
         if (package, name) in self.class_cache:

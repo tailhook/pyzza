@@ -226,7 +226,7 @@ def build(files, output, recipe, info):
         width=info.get('width', 500), height=info.get('height', 375),
         frame_rate=info.get('frame-rate', 15),
         main_class=info.get('main-class', 'Main'),
-        filename=filename_mode)
+        filenames=filename_mode)
 
 def files(src, dependencies):
     all = [src]

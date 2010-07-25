@@ -39,9 +39,9 @@ class GlyphCache:
                 glyph = self._make_glyph(char)
                 self.glyphs[char] = glyph
             target.copyPixels(cbmp, glyph.rect, pt, glyph, None, True)
-            pt.x += glyph.rect.width - 1
             if cursor == i:
                 target.copyPixels(cbmp, Rectangle(0, 0, 2, self.lineheight), pt)
+            pt.x += glyph.rect.width - 1
         if cursor == text.length:
             target.copyPixels(cbmp, Rectangle(0, 0, 2, self.lineheight), pt)
         return lines
@@ -216,8 +216,8 @@ class Console(Sprite):
                     self.cursor.x -= 1
                 self.refreshinput()
             elif event.keyCode == 39: # right
-                if self.cursor.x == self.inputlines[self.cursor.y]:
-                    if self.inputlines.length > self.cursor.y:
+                if self.cursor.x == self.inputlines[self.cursor.y].length:
+                    if self.inputlines.length > self.cursor.y+1:
                         self.cursor.y += 1
                         self.cursor.x = 0
                 else:
@@ -328,9 +328,20 @@ class Console(Sprite):
     def refreshinput(self):
         self.mybitmap.fillRect(Rectangle(0, self.cache.lineheight*self.visible_lines,
             self.stage.stageWidth, self.inputlines.length*self.cache.lineheight+2), self.background_color)
+        if self.evaluator:
+            ps1 = self.evaluator.ps1
+            ps2 = self.evaluator.ps2
+        else:
+            ps1 = ''
+            ps2 = ''
         for i in range(self.inputlines.length):
             line = self.inputlines[i]
+            if i == 0:
+                line = ps1 + line
+                cx = self.cursor.x+ps1.length if self.cursor.y == i else undefined
+            else:
+                line = ps2 + line
+                cx = self.cursor.x+ps2.length if self.cursor.y == i else undefined
             self.cache.draw_line(line, 2,
                 (self.visible_lines+i)*self.cache.lineheight+2,
-                self.input_color, self.mybitmap,
-                self.cursor.x if self.cursor.y == i else undefined)
+                self.input_color, self.mybitmap, cx)
