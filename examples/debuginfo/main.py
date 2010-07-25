@@ -1,7 +1,7 @@
 from string import repr
 from flash.text import TextField
 from flash.display import Sprite, StageAlign, StageScaleMode
-from logging import Log, Console
+from logging import Log, Console, Evaluator
 
 class Holder:
     textbox = None
@@ -32,7 +32,7 @@ class Main(Sprite):
         self.tf.width = 640
         self.tf.height = 480
         MyLog.warning("My Warning Function Called")
-        Log.add_handler(Console(self))
+        Log.add_handler(Console(self, Evaluator()))
         Log.info("Some info message")
         Log.warning("Some warning")
         Log.error("Some error message")

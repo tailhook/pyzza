@@ -895,6 +895,7 @@ class CodeFragment:
                 self.exceptions.append(excinfo)
                 self.bytecodes.append(startlabel)
                 self.bytecodes.append(bytecode.findpropstrict(reg.name))
+                self.bytecodes.append(bytecode.coerce_a())
                 self.bytecodes.append(bytecode.setlocal(extra))
                 self.bytecodes.append(bytecode.jump(endcatchlabel))
                 self.bytecodes.append(endtrylabel)
@@ -905,14 +906,8 @@ class CodeFragment:
                 self.bytecodes.append(bytecode.newcatch(excinfo))
                 self.bytecodes.append(bytecode.pop()) # some info
                 self.bytecodes.append(bytecode.pop()) # exception var
-
-                #~ self.bytecodes.append(bytecode.getlex(self.qname('trace')))
-                #~ self.bytecodes.append(bytecode.pushnull())
-                #~ self.bytecodes.append(bytecode.pushstring("Exception"))
-                #~ self.bytecodes.append(bytecode.call(1))
-                #~ self.bytecodes.append(bytecode.pop())
-
                 self.bytecodes.append(bytecode.getlocal_0())
+                self.bytecodes.append(bytecode.coerce_a())
                 self.bytecodes.append(bytecode.setlocal(extra))
                 self.bytecodes.append(endcatchlabel)
                 self.bytecodes.append(bytecode.getlocal(extra))

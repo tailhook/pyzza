@@ -925,6 +925,10 @@ class Eval(Test):
         self.assertEquals(val, 16)
         val = test6.apply(scope, [val])
         self.assertEquals(val, 32)
+        self.assertEquals(scope.a, 1)
+        self.assertEquals(scope.b, 3)
+        self.assertEquals(scope.c, 4)
+        self.assertEquals(scope._, 16)
 
 @package('')
 class Main(Sprite):
