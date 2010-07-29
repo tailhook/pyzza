@@ -57,17 +57,20 @@ class Main(Sprite):
             Log.info("(It's ok if you are on local filesystem)")
             loader.load(req)
         self.child = loader
-        loader.addEventListener(Event.COMPLETE, self._bindcontent)
+        loader.contentLoaderInfo.addEventListener(
+            Event.COMPLETE, self._bindcontent)
 
-    def _bindcontent(self):
-        Log.info('done')
+    def _bindcontent(self, ev):
         self.removeChild(self.child)
         self.addChild(self.child.content)
         self.child = self.child.content
+        if self.console.visible:
+            self.setChildIndex(self.console, self.numChildren-1)
 
     def unload(self):
         if isinstance(self.child, Loader):
-            self.child.removeEventListener(Event.COMPLETE, self._bindcontent)
+            self.child.contentLoaderInfo.removeEventListener(
+                Event.COMPLETE, self._bindcontent)
         self.removeChild(self.child)
         self.child = None
 
