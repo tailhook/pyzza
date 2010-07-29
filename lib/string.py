@@ -1,13 +1,18 @@
+repr_re = RegExp(r'\\|"|\r|\n|\t', 'g')
+repr_dic = {
+    '\\': r'\\',
+    '"': r'\"',
+    '\r': r'\r',
+    '\n': r'\n',
+    '\t': r'\t',
+    }
+def repr_rep(val, idx, full):
+    return repr_dic[val]
+
 @package('string')
 def repr(value):
     if isinstance(value, String):
-        return '"'+value          \
-            .replace('\\', r'\\') \
-            .replace('"', r'\"')   \
-            .replace('\r', r'\r') \
-            .replace('\n', r'\n') \
-            .replace('\t', r'\t') \
-            +'"'
+        return '"'+value.replace(repr_re, repr_rep)+'"'
     elif isinstance(value, Number):
         return value.toString()
     elif isinstance(value, Boolean):

@@ -3,10 +3,13 @@ from flash.display import BitmapData, Sprite, Bitmap, PixelSnapping, Loader
 from flash.events import Event, KeyboardEvent
 from flash.text import TextField, TextFieldType, TextFormat
 from flash.geom import Point, Rectangle
-from flash.net import URLRequest
+from flash.net import URLRequest, URLRequestHeader
+from flash.system import Security, LoaderContext, ApplicationDomain, SecurityDomain
 
 from logging import Log, LogLevel
 from string import repr
+
+url_re = RegExp('^(\w+)://([^@]*@)?([^/:]+)(:\d+)?/')
 
 class GlyphCache:
     def __init__(self):
@@ -65,20 +68,28 @@ def evaluate(_):
 @package('logging')
 class Evaluator:
 
-    def __init__(self, url="http://trypyzza.gafol.net/makeeval",
+    def __init__(self, namespace=None,
+            url="http://trypyzza.gafol.net/makeeval",
             ps1=">>> ", ps2="... "):
         self.url = url
         self.ps1 = ps1
         self.ps2 = ps2
         self.last_value = None
-        self.scope = {'test': 22}
+        self.security = None
+        if namespace == None:
+            self.scope = {}
+        else:
+            self.scope = namespace
 
     def need_continue(self, input):
         return False
 
     def eval(self, console, input):
+        m = url_re.exec(console.loaderInfo.loaderURL)
+        domain = m and m[3] or ''
         val = ["""
 from flash.display import Sprite
+from flash.system import Security
 @package("logging.eval")
 class Main(Sprite):
     def __init__(self):
@@ -100,7 +111,24 @@ class Main(Sprite):
         req.method = 'POST'
         req.data = data
         cur = Loader()
-        cur.load(req)
+        if self.security == None or self.security == 'ok':
+            context = LoaderContext()
+            context.securityDomain = SecurityDomain.currentDomain
+            context.applicationDomain = ApplicationDomain(
+                ApplicationDomain.currentDomain)
+            context.checkPolicyFile = True
+            try:
+                cur.load(req, context)
+            except SecurityError as e: #probably in local filesystem
+                console.add_text(str(e),
+                    console.levelcolors[LogLevel.ERROR])
+                console.add_text("Trying different security domain, "
+                    "some functionality may be absent")
+                console.add_text("(It's ok if you are on local filesystem)")
+                cur.load(req)
+                self.security = 'bad'
+        else:
+            cur.load(req)
 
         def _run(ev):
             console.clearinput()
@@ -109,7 +137,7 @@ class Main(Sprite):
             try:
                 self.last_value = fun.apply(self.scope, [self.last_value])
             except Error as e:
-                console.add_text("Runtime Error: "+e.getStackTrace(),
+                console.add_text("Runtime Error: "+(e.getStackTrace() or e),
                     console.levelcolors[LogLevel.ERROR])
             else:
                 if self.last_value != undefined:

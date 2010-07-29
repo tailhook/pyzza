@@ -221,12 +221,15 @@ def build(files, output, recipe, info):
     for fname in recipe['Global'].get('libraries', ()):
         lib.add_file(fname)
     filename_mode = recipe['Global'].get('debug-filename', 'full')
-    compile.compile((f for f in files if f.endswith('.py')),
-        lib, compile.make_globals(lib), output,
-        width=info.get('width', 500), height=info.get('height', 375),
-        frame_rate=info.get('frame-rate', 15),
-        main_class=info.get('main-class', 'Main'),
-        filenames=filename_mode)
+    try:
+        compile.compile((f for f in files if f.endswith('.py')),
+            lib, compile.make_globals(lib), output,
+            width=info.get('width', 500), height=info.get('height', 375),
+            frame_rate=info.get('frame-rate', 15),
+            main_class=info.get('main-class', 'Main'),
+            filenames=filename_mode)
+    except (compile.SyntaxError, parser.SyntaxError) as e:
+        compile.print_error(e)
 
 def files(src, dependencies):
     all = [src]
