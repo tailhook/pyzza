@@ -77,8 +77,9 @@ class Main(Sprite):
     def get_root(self):
         return self.child
 
-    def print(self, text):
-        self.console.add_text(text)
+    def print(self, *values):
+        values.__proto__ = Array.prototype
+        self.console.add_text(values.join(' '))
 
     def print_namespace(self):
         for k, v in items(self.namespace):
