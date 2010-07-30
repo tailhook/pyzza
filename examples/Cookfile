@@ -31,3 +31,6 @@ Targets:
         frame-rate: 30
         main-class: debuginfo.Main
         main-source: debuginfo/main.py
+    console.swf:
+        main-class: console.Main
+        main-source: consolewrapper.py
