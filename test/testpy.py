@@ -912,6 +912,28 @@ class Eval(Test):
         def test6(_):
             fun2()
 
+        @__eval__
+        def test7(_):
+            def fun3(c):
+                return a+b+c
+
+        @__eval__
+        def test8(_):
+            fun3(2)
+
+        @__eval__
+        def test9(_):
+            def fun4(c):
+                def fun(d):
+                    return (a+b+c)*d
+                return fun
+            ff = fun4(10)
+            ff(1)
+
+        @__eval__
+        def test10(_):
+            [ff(2), ff(4), fun4(7)(2)]
+
         scope = {}
         val = test1.apply(scope, [val])
         self.assertEquals(val, 4)
@@ -925,10 +947,18 @@ class Eval(Test):
         self.assertEquals(val, 16)
         val = test6.apply(scope, [val])
         self.assertEquals(val, 32)
+        val = test7.apply(scope, [val])
+        self.assertEquals(val, undefined)
+        val = test8.apply(scope, [val])
+        self.assertEquals(val, 6)
+        val = test9.apply(scope, [val])
+        self.assertEquals(val, 14)
+        val = test10.apply(scope, [val])
+        self.assertEquals(repr(val), '[28, 56, 22]')
         self.assertEquals(scope.a, 1)
         self.assertEquals(scope.b, 3)
         self.assertEquals(scope.c, 4)
-        self.assertEquals(scope._, 16)
+        self.assertEquals(scope._, 14)
 
 @package('')
 class Main(Sprite):

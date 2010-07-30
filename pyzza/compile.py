@@ -486,7 +486,7 @@ class CodeFragment:
     scope_stack_max = 10 # TODO: fix
     def __init__(self, ast, library, code_header,
             parent_namespaces,
-            mode="global", #class_body, method, function, eval
+            mode="global", #class_body, method, function, eval, evalchildfunc
             arguments=(None,),
             varargument=None,
             filename=None,
@@ -522,7 +522,7 @@ class CodeFragment:
                 self.namespace.update((k, Property(
                     abc.QName(abc.NSPrivate(filename), k)))
                     for (idx, k) in enumerate(ast.func_export))
-            elif mode in ('method', 'function'):
+            elif mode in ('method', 'function', 'evalchildfunc'):
                 self.activation = Register()
                 self.bytecodes.append(bytecode.newactivation())
                 self.bytecodes.append(bytecode.dup())
@@ -673,6 +673,9 @@ class CodeFragment:
         else:
             if self.mode == 'eval':
                 self.namespace[name] = LocalProperty(self.qname(name))
+                ns = self
+            elif self.mode == 'evalchildfunc':
+                self.namespace[name] = Property(self.qname(name))
                 ns = self
             else:
                 raise NameError(name, filename=self.filename,
@@ -836,6 +839,8 @@ class CodeFragment:
             package = abc.NSPrivate(self.filename)
             method = False
             mode = "function"
+            if 'eval' in self.mode:
+                mode = "evalchildfunc"
             if node.decorators:
                 for i in node.decorators:
                     if i.name.value == 'package':
@@ -862,7 +867,7 @@ class CodeFragment:
                 node.lineno, node.name.value),
                 frag, node.arguments)
             prop = self.namespace[node.name.value]
-            if isinstance(prop, Property) and not isinstance(prop, LocalProperty):
+            if isinstance(prop, Property) and len(self.parent_namespaces) <= 1:
                 prop.__class__ = NewFunction
                 prop.code = frag
                 prop.method_info = mbody.method
@@ -1101,6 +1106,9 @@ class CodeFragment:
         else:
             if self.mode == 'eval':
                 self.namespace[name] = LocalProperty(self.qname(name))
+                ns = self
+            elif self.mode == 'evalchildfunc':
+                self.namespace[name] = Property(self.qname(name))
                 ns = self
             else:
                 raise NameError(name, filename=self.filename,
