@@ -488,6 +488,12 @@ class MethodBodyInfo(ABCStruct):
         trait_count = stream.read_u30()
         self.traits_info = [TraitsInfo.read(stream, index)
             for i in range(trait_count)]
+        # We do not read bytecodes by default any more
+        # This is for performance reasons
+        # And since there are more bytecodes that we really know
+        return self
+
+    def read_bytecodes(self):
         with index.for_method(self) as mindex:
             bcode = bytecode.parse(self.code, mindex)
         ext_labels = defaultdict(list)
@@ -496,7 +502,6 @@ class MethodBodyInfo(ABCStruct):
                 ext_labels[k].append(v)
         self.bytecode = list(map(itemgetter(1),
             bytecode.make_labels(bcode, ext_labels)))
-        return self
 
     def write(self, stream, index):
         with index.for_method(self) as mindex:
