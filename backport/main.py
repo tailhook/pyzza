@@ -24,3 +24,5 @@ shutil.copy(os.path.join(origdir,'setup.py'),
     os.path.join(origdir, '26'))
 shutil.copy(os.path.join(origdir,'pyzza', 'Grammar.txt'),
     os.path.join(origdir, '26', 'pyzza'))
+shutil.copytree(os.path.join(origdir, 'scripts'),
+    os.path.join(origdir, '26', 'scripts'))
