@@ -6,17 +6,18 @@ from lib2to3.fixer_util import LParen, RParen, Comma
 """
 Fixes:
     isinstance(..., str)
-into:
     isinstance(..., unicode)
+into:
+    isinstance(..., basestring)
 """
 
 class FixIistr(fixer_base.BaseFix):
     PATTERN = """
         power< 'isinstance' trailer< '(' arglist< any ',' type='str' > ')' > >
+        |
+        power< 'isinstance' trailer< '(' arglist< any ',' type='unicode' > ')' > >
     """
 
     def transform(self, node, results):
-        results['type'].value = 'unicode'
+        results['type'].value = 'basestring'
         return node
-
-

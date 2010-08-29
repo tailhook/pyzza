@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Old module, currently setup.py should do the work for you
+
 from lib2to3 import refactor
 import os.path
 import glob
