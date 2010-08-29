@@ -1,0 +1,7 @@
+include backport/*.py
+recursive-include lib *.py
+include examples/Cookfile
+include examples/*.dot
+recursive-include examples *.py
+include test/Cookfile
+include test/*.py

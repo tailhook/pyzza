@@ -49,7 +49,7 @@ setup(
         ],
     package_dir = {'pyzza': 'pyzza'},
     package_data = {'pyzza': [
-        'Grammar*',
+        'Grammar.txt',
         ]},
     data_files = [
         ('share/pyzza', glob.glob('lib/*.py')),
