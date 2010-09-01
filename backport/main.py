@@ -11,10 +11,10 @@ if os.path.exists('26'):
 os.makedirs('26/pyzza')
 rtool = refactor.RefactoringTool(refactor.get_fixers_from_package('backport'))
 for fn in glob.glob(os.path.join('pyzza', '*.py')):
-    with open(fn, 'rt', encoding='utf-8') as f:
+    with open(fn, 'rt') as f:
         val = f.read()
         nval = rtool.refactor_string(val, fn)
-    with open(os.path.join('26', fn), 'wt', encoding='utf-8') as o:
+    with open(os.path.join('26', fn), 'wt') as o:
         o.write('from __future__ import print_function, absolute_import\n')
         o.write('from contextlib import nested\n')
         o.write(str(nval))

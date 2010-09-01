@@ -17,7 +17,7 @@ class build_py26(_build_py):
                 res.append((package, 'collections',
                     os.path.join(os.path.dirname(package_dir),
                         'backport', 'collections.py')))
-            badio = ('pyzza', 'io', 'pyzza/io.py')
+            badio = ('pyzza', 'io', os.path.join('pyzza', 'io.py'))
             if badio in res:
                 res.remove(badio)
                 res.append(('pyzza', 'io', 'backport/io.py'))
@@ -38,7 +38,7 @@ class build_py26(_build_py):
 
 setup(
     name = "pyzza",
-    version = "0.2.9",
+    version = "0.2.9.1",
 
     packages = ['pyzza'],
     scripts = [
