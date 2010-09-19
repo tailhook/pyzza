@@ -1,0 +1,4 @@
+*.pyc
+/pyzza/*.pickle
+/MANIFEST
+/dist
