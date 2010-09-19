@@ -38,7 +38,7 @@ class build_py26(_build_py):
 
 setup(
     name = "pyzza",
-    version = "0.2.9.1",
+    version = "0.2.10",
 
     packages = ['pyzza'],
     scripts = [
@@ -73,6 +73,7 @@ setup(
         ],
     license = "MIT",
     keywords = "flash pyzza",
-    url = "http://pyzza.gafol.net",
+    url = "http://github.com/tailhook/pyzza",
+    download_url = "http://github.com/tailhook/pyzza/downloads",
     requires = 'pyyaml',
 )

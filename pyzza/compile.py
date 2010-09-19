@@ -474,6 +474,11 @@ class CodeFragment:
         parser.Negate: 'negate',
         parser.ListMaker: 'list',
         parser.DictMaker: 'dict',
+        parser.BitAnd: 'bitand',
+        parser.BitOr: 'bitor',
+        parser.BitXor: 'bitxor',
+        parser.Shl: 'shl',
+        parser.Shr: 'shr',
         }
     statement_nodes = (
         parser.ImportStmt, parser.Class, parser.Func, parser.Assign,
@@ -1483,6 +1488,25 @@ class CodeFragment:
     @binary
     def visit_lesseq(self, node):
         self.bytecodes.append(bytecode.lessequals())
+
+    @binary
+    def visit_bitand(self, node):
+        self.bytecodes.append(bytecode.bitand())
+
+    @binary
+    def visit_bitor(self, node):
+        self.bytecodes.append(bytecode.bitor())
+
+    @binary
+    def visit_bitxor(self, node):
+        self.bytecodes.append(bytecode.bitxor())
+    @binary
+    def visit_shl(self, node):
+        self.bytecodes.append(bytecode.lshift())
+
+    @binary
+    def visit_shr(self, node):
+        self.bytecodes.append(bytecode.rshift())
 
     ##### Built-in functions #####
 

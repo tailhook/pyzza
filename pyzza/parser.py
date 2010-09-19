@@ -563,6 +563,16 @@ class Equal(Binary):
     __slots__ = ()
 class NotEqual(Binary):
     __slots__ = ()
+class Shl(Binary):
+    __slots__ = ()
+class Shr(Binary):
+    __slots__ = ()
+class BitAnd(Binary):
+    __slots__ = ()
+class BitOr(Binary):
+    __slots__ = ()
+class BitXor(Binary):
+    __slots__ = ()
 
 operators = {
     '+': Add,
@@ -578,6 +588,11 @@ operators = {
     '==': Equal,
     'or': Or,
     'and': And,
+    '>>': Shr,
+    '<<': Shl,
+    '&': BitAnd,
+    '|': BitOr,
+    '^': BitXor,
     }
 def Term(child, ctx):
     """Any binary operators are here. Precedence is handled by parser"""
@@ -710,6 +725,10 @@ tokens = {
     token.MINEQUAL: Op,
     token.SLASHEQUAL: Op,
     token.PERCENTEQUAL: Op,
+    token.RIGHTSHIFT: Op,
+    token.LEFTSHIFT: Op,
+    token.AMPER: Op,
+    token.VBAR: Op,
     }
 
 symbols = {
