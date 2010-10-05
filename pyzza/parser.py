@@ -463,8 +463,9 @@ def _Tuple(child, ctx):
         return child[0]
 
 def Skip(child, ctx):
-    assert len(child) == 1, (child, ctx)
-    return child[0]
+    assert len(child) <= 1, (child, ctx)
+    if child:
+        return child[0]
 
 def Atom(child, ctx):
     if len(child) == 1:
@@ -755,7 +756,7 @@ symbols = {
     symbol.or_test: Term,
     symbol.test: Test,
     symbol.argument: Skip,
-    symbol.pass_stmt: Skip,
+    symbol.pass_stmt: Nop,
     symbol.arglist: List,
     symbol.typedargslist: Parameters,
     symbol.parameters: _Parameters,

@@ -149,6 +149,11 @@ class AS3Class:
             self.name.namespace.name, self.name.name,
             self.header and self.header._source, self.index)
 
+    @property
+    def interface(self):
+        return bool(self.class_info.instance_info.flags \
+            & abc.InstanceInfo.CONSTANT_ClassInterface)
+
     def get_base(self):
         lib = self.library()
         sn = self.class_info.instance_info.super_name

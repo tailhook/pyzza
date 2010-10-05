@@ -541,14 +541,17 @@ class B(A):
 class SlotA:
     __slots__ = ('a', 'b')
     def __init__(self, a, b):
+        trace("A " + a + " B " + b)
         self.a = a
         self.b = b
+        trace("A " + a + " B " + b + " A " + self.a + " B " + self.b)
 
 class SlotB(SlotA):
     __slots__ = ('c', 'd')
     def __init__(self, c, d):
         super().__init__(c + d, c - d)
         self.c = c
+        trace("C " + c + " D " + d + " A " + self.a + " B " + self.b)
         self.d = d
 
 class SlotC(SlotA):
@@ -557,6 +560,39 @@ class SlotC(SlotA):
         super().__init__(c + d, c - d)
         self.c = c
         self.d = d
+
+@interface
+class IAnimal:
+    def __init__(self): pass
+    def cry(self): pass
+    def buy(self, name): pass
+    def die(self): pass
+
+class Dog(IAnimal):
+    def __init__(self):
+        pass
+
+    def cry(self):
+        return "Baw, waw"
+
+    def buy(self, name):
+        return "Dog's "+name
+
+    def die(self):
+        raise TypeError("Dog's can't die")
+
+class Chicken(IAnimal):
+    def __init__(self):
+        pass
+
+    def cry(self):
+        return "Kud, kudah"
+
+    def buy(self, name):
+        return "Chicken's "+name
+
+    def die(self):
+        return 'rip'
 
 class TestClass(Test):
     def __init__(self, reporter, name):
@@ -567,6 +603,7 @@ class TestClass(Test):
         self.testStatic()
         self.testSlots()
         self.testClassmethods()
+        self.testInterface()
 
     def testOverride(self):
         self.assertEquals(A().hello(), 'hello')
@@ -623,6 +660,23 @@ class TestClass(Test):
             pass # sorry also for this error
         else:
             raise Failure("ReferenceError not raised")
+
+    def testInterface(self):
+        dog = Dog()
+        self.assertEquals(dog.cry(), 'Baw, waw')
+        self.assertEquals(dog.buy('food'), "Dog's food")
+        try:
+            dog.die()
+        except TypeError:
+            pass
+        else:
+            raise Failure("TypeError not raised")
+        self.assertTrue(isinstance(dog, IAnimal))
+        chick = Chicken()
+        self.assertEquals(chick.cry(), 'Kud, kudah')
+        self.assertEquals(chick.buy('food'), "Chicken's food")
+        self.assertEquals(chick.die(), 'rip')
+        self.assertTrue(isinstance(chick, IAnimal))
 
 def global_fun(a, b):
     return (a+b)*(a-b)

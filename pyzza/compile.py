@@ -45,7 +45,7 @@ class CodeHeader:
         tag.empty()
         self.tag = tag
 
-    def add_method_body(self, name, frag, arguments=None):
+    def add_method_body(self, name, frag, arguments=None, has_body=True):
         mi = abc.MethodInfo()
         mi.param_type = [abc.AnyType() for i in frag.arguments[1:]]
         mi.return_type = abc.AnyType()
@@ -72,26 +72,28 @@ class CodeHeader:
             mi.flags |= abc.MethodInfo.NEED_REST
         self.tag.real_body.method_info.append(mi)
         frag._method_info = mi
-        mb = abc.MethodBodyInfo()
-        mb.method = mi
-        mb.max_stack = frag.max_stack
-        mb.local_count = frag.local_count
-        mb.init_scope_depth = frag.scope_stack_init
-        mb.max_scope_depth = frag.scope_stack_max
-        mb.exception_info = frag.exceptions
-        traits = []
-        for (k, v) in frag.namespace.items():
-            if isinstance(v, ClosureSlot):
-                traits.append(abc.TraitsInfo(
-                    abc.QName(abc.NSPrivate(frag.filename), k),
-                    abc.TraitSlot(v.index),
-                    attr=0))
-        mb.traits_info = traits
-        mb.bytecode = frag.bytecodes
-        self.tag.real_body.method_body_info.append(mb)
-        return mb
+        if has_body:
+            mb = abc.MethodBodyInfo()
+            mb.method = mi
+            mb.max_stack = frag.max_stack
+            mb.local_count = frag.local_count
+            mb.init_scope_depth = frag.scope_stack_init
+            mb.max_scope_depth = frag.scope_stack_max
+            mb.exception_info = frag.exceptions
+            traits = []
+            for (k, v) in frag.namespace.items():
+                if isinstance(v, ClosureSlot):
+                    traits.append(abc.TraitsInfo(
+                        abc.QName(abc.NSPrivate(frag.filename), k),
+                        abc.TraitSlot(v.index),
+                        attr=0))
+            mb.traits_info = traits
+            mb.bytecode = frag.bytecodes
+            self.tag.real_body.method_body_info.append(mb)
+            return mb
 
-    def add_class(self, name, bases, frag, package, slots=()):
+    def add_class(self, name, bases, frag, package, slots=(),
+        implements=[], interface=False):
         cls = abc.ClassInfo()
         inst = abc.InstanceInfo()
         cls.instance_info = inst
@@ -115,9 +117,9 @@ class CodeHeader:
                 traits.append(trait)
         cls.trait = traits
         inst.name = abc.QName(package, name)
-        inst.super_name = bases[0].name
+        inst.super_name = bases[0].name if bases else abc.AnyType()
         inst.flags = 0
-        inst.interface = []
+        inst.interface = [i.name for i in implements]
         inst.iinit = frag.namespace['__init__'].code_fragment._method_info
         traits = []
         for (k, m) in frag.namespace.items():
@@ -152,6 +154,8 @@ class CodeHeader:
                     attr=0))
             if sealed:
                 inst.flags |= abc.InstanceInfo.CONSTANT_ClassSealed
+        if interface:
+            inst.flags |= abc.InstanceInfo.CONSTANT_ClassInterface
         inst.trait = traits
         self.tag.real_body.class_info.append(cls)
         return cls
@@ -491,7 +495,8 @@ class CodeFragment:
     scope_stack_max = 10 # TODO: fix
     def __init__(self, ast, library, code_header,
             parent_namespaces,
-            mode="global", #class_body, method, function, eval, evalchildfunc
+            mode="global", # class_body, interface_body,
+                           # method, function, eval, evalchildfunc
             arguments=(None,),
             varargument=None,
             filename=None,
@@ -507,7 +512,7 @@ class CodeFragment:
             bytecode.getlocal_0(),
             bytecode.pushscope(),
             ]
-        if mode == 'class_body':
+        if mode in ('class_body', 'interface_body'):
             self.class_name = ast.name
             assert not ast.func_export
             self.namespace = {k: Property(abc.QName(abc.NSPackage(''),k))
@@ -573,8 +578,11 @@ class CodeFragment:
             self.namespace[arguments[0]] = ClsRegister(0)
         for args in ast.func_publicnames:
             self.library.add_name(*args)
-        self.exec_suite(ast.body if hasattr(ast, 'body') else ast,
-            eval=mode == 'eval')
+        body = ast.body if hasattr(ast, 'body') else ast
+        if body:
+            self.exec_suite(body, eval=mode == 'eval')
+        else:
+            self.bytecodes[:] = ()
         self.bytecodes.append(bytecode.returnvoid())
         self.fix_registers()
         self.verify_stack()
@@ -745,39 +753,51 @@ class CodeFragment:
     def visit_class(self, node, void):
         assert void == True
         package = abc.NSPrivate(self.filename)
+        interface = False
         if node.decorators:
             for i in node.decorators:
                 if i.name.value == 'package':
                     package = abc.NSPackage(i.arguments[0].value)
                 elif i.name.value == 'private':
                     package = abc.NSPrivate(self.filename)
+                elif i.name.value == 'interface':
+                    interface = True
                 else:
                     raise NotImplementedError("No decorator ``{0}''"
                         .format(i.name))
         frag = CodeFragment(node, self.library, self.code_header,
-            mode="class_body",
+            mode='interface_body' if interface else "class_body",
             parent_namespaces=(self,) + self.parent_namespaces,
             filename=self.filename,
             )
         self.code_header.add_method_body(node.name.value, frag)
-        assert len(node.bases) <= 1
-        if not node.bases:
-            val = self.library.get_class('', 'Object')
-        else:
-            name = self.find_name(node.bases[0].value, node.bases[0])
+        basenames = []
+        for b in node.bases:
+            name = self.find_name(b.value, node.bases)
             try:
-                val = name.class_info
+                basenames.append(name.class_info)
             except AttributeError:
                 raise NotAClassError(
                     "Imported name {!r} not found or not a class"
                     .format(name.property_name), filename=self.filename,
-                    lineno=node.bases[0].lineno, column=node.bases[0].col)
+                    lineno=node.bases.lineno, column=node.bases.col)
         bases = []
-        while val:
-            bases.append(val)
-            val = val.get_base()
+        if basenames:
+            val = [b for b in basenames if not b.interface]
+            if len(val) == 1:
+                val = val[0]
+                while val:
+                    bases.append(val)
+                    val = val.get_base()
+            elif not val:
+                if not interface:
+                    bases = [self.find_name('Object', node.bases).class_info]
+            else:
+                raise NotImplementedError("No multiple inheritance yet")
         cls = self.code_header.add_class(node.name.value, bases, frag,
-            package=package, slots=getattr(node, 'class_slots', ()))
+            package=package, slots=getattr(node, 'class_slots', ()),
+            implements=[b for b in basenames if b.interface],
+            interface=interface)
         prop = self.namespace[node.name.value]
         if isinstance(prop, Property):
             prop.__class__ = NewClass
@@ -788,7 +808,10 @@ class CodeFragment:
             for i in reversed(bases):
                 self.bytecodes.append(bytecode.getlex(i.name))
                 self.bytecodes.append(bytecode.pushscope())
-            self.bytecodes.append(bytecode.getlex(bases[0].name))
+            if not bases:
+                self.bytecodes.append(bytecode.pushnull())
+            else:
+                self.bytecodes.append(bytecode.getlex(bases[0].name))
             self.bytecodes.append(bytecode.newclass(cls))
             for i in range(len(bases)):
                 self.bytecodes.append(bytecode.popscope())
@@ -801,7 +824,7 @@ class CodeFragment:
             args = args[:-1]
         else:
             vararg = None
-        if self.mode == 'class_body':
+        if self.mode in ('class_body', 'interface_body'):
             classmethod = False
             staticmethod = False
             metadata = {}
@@ -839,7 +862,7 @@ class CodeFragment:
                 self.namespace[node.name.value] = Method(frag, methodns)
             self.code_header.add_method_body(
                 '{0}/{1}'.format(self.class_name.value, node.name.value),
-                frag, node.arguments)
+                frag, node.arguments, has_body=self.mode != 'interface_body')
         else:
             package = abc.NSPrivate(self.filename)
             method = False
