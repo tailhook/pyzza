@@ -594,6 +594,19 @@ class Chicken(IAnimal):
     def die(self):
         return 'rip'
 
+class Parrot(A, IAnimal):
+    def __init__(self):
+        pass
+
+    def cry(self):
+        return "Popka durak"
+
+    def buy(self, name):
+        return "Parrot's "+name
+
+    def die(self):
+        return 'rip'
+
 class TestClass(Test):
     def __init__(self, reporter, name):
         super().__init__(reporter, name)
@@ -601,7 +614,7 @@ class TestClass(Test):
     def test(self):
         self.testOverride()
         self.testStatic()
-        self.testSlots()
+#~         self.testSlots()
         self.testClassmethods()
         self.testInterface()
 
@@ -677,6 +690,11 @@ class TestClass(Test):
         self.assertEquals(chick.buy('food'), "Chicken's food")
         self.assertEquals(chick.die(), 'rip')
         self.assertTrue(isinstance(chick, IAnimal))
+        parrot = Parrot()
+        self.assertEquals(parrot.cry(), 'Popka durak')
+        self.assertEquals(parrot.hello(), 'hello')
+        self.assertTrue(isinstance(parrot, IAnimal))
+
 
 def global_fun(a, b):
     return (a+b)*(a-b)
