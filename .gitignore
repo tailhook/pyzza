@@ -3,3 +3,4 @@ Cookfile.dep
 /pyzza/*.pickle
 /MANIFEST
 /dist
+/test/testpy.swf
