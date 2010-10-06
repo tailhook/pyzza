@@ -782,18 +782,17 @@ class CodeFragment:
                     .format(name.property_name), filename=self.filename,
                     lineno=node.bases.lineno, column=node.bases.col)
         bases = []
-        if basenames:
-            val = [b for b in basenames if not b.interface]
-            if len(val) == 1:
-                val = val[0]
-                while val:
-                    bases.append(val)
-                    val = val.get_base()
-            elif not val:
-                if not interface:
-                    bases = [self.find_name('Object', node.bases).class_info]
-            else:
-                raise NotImplementedError("No multiple inheritance yet")
+        val = [b for b in basenames if not b.interface]
+        if len(val) == 1:
+            val = val[0]
+            while val:
+                bases.append(val)
+                val = val.get_base()
+        elif not val:
+            if not interface:
+                bases = [self.find_name('Object', node.bases).class_info]
+        else:
+            raise NotImplementedError("No multiple inheritance yet")
         cls = self.code_header.add_class(node.name.value, bases, frag,
             package=package, slots=getattr(node, 'class_slots', ()),
             implements=[b for b in basenames if b.interface],

@@ -614,7 +614,7 @@ class TestClass(Test):
     def test(self):
         self.testOverride()
         self.testStatic()
-#~         self.testSlots()
+        self.testSlots()
         self.testClassmethods()
         self.testInterface()
 
