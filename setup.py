@@ -38,7 +38,7 @@ class build_py26(_build_py):
 
 setup(
     name = "pyzza",
-    version = "0.2.13",
+    version = "0.2.14",
 
     packages = ['pyzza'],
     scripts = [
