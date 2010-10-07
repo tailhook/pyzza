@@ -54,6 +54,10 @@ class LibCache:
                             names[nm.namespace.name, nm.name] = 'class'
                         elif isinstance(t.data, abc.TraitMethod):
                             names[nm.namespace.name, nm.name] = 'function'
+                for t in tag.real_body.class_info:
+                    nm = t.instance_info.name
+                    if isinstance(nm.namespace, abc.NSPackage):
+                        names[nm.namespace.name, nm.name] = 'class'
                 tag.real_body._names = names
                 self.code_headers.append(tag.real_body)
 
