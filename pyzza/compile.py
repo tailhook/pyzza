@@ -134,6 +134,19 @@ class CodeHeader:
                         flag = abc.TraitsInfo.ATTR_Override
                         disp_id = basetrait.disp_id
                         break
+                for i in implements:
+                    baset = i.get_method_trait(fullname,
+                        ignore_ns=True, raw_trait=True)
+                    if baset is None:
+                        continue
+                    basetrait = baset.data
+                    if len(m.code_fragment._method_info.param_type) \
+                        != len(basetrait.method.param_type):
+                        raise NotImplementedError("Argument count mismatch")
+                    m.code_fragment._method_info.param_type \
+                        = basetrait.method.param_type
+                    m.code_fragment._method_info.return_type \
+                        = basetrait.method.return_type
                 trait = abc.TraitsInfo(
                     fullname,
                     abc.TraitMethod(m.code_fragment._method_info, disp_id),
@@ -773,7 +786,7 @@ class CodeFragment:
         self.code_header.add_method_body(node.name.value, frag)
         basenames = []
         for b in node.bases:
-            name = self.find_name(b.value, node.bases)
+            name = self.find_name(b.value, node)
             try:
                 basenames.append(name.class_info)
             except AttributeError:

@@ -2,7 +2,7 @@ from flash.display import DisplayObject, Sprite
 from flash.text import TextField
 from flash.text import TextFormat
 from flash.display import StageAlign
-from flash.events import Event
+from flash.events import Event, IEventDispatcher
 from flash.utils import Dictionary
 from unittest import Test, Failure, Reporter
 from string import repr, format
@@ -606,6 +606,22 @@ class Parrot(A, IAnimal):
 
     def die(self):
         return 'rip'
+
+class EvDisp(IEventDispatcher):
+    # let's just check if we can meet requirements of fully typed interface
+    def __init__(self):
+        pass
+    def addEventListener(self, type, listener, useCapture=False,
+        priority=0, useWeakReference=False):
+        return 1
+    def removeEventListener(self, type, listener, useCapture=False):
+        return 2
+    def dispatchEvent(self, event):
+        return 3
+    def hasEventListener(self, type):
+        return 4
+    def willTrigger(self, type):
+        return 5
 
 class TestClass(Test):
     def __init__(self, reporter, name):
