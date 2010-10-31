@@ -165,6 +165,19 @@ class AS3Class:
             return None
         return lib.get_class(sn.namespace.name, sn.name)
 
+    def get_interfaces(self):
+        lib = self.library()
+        for i in self.class_info.instance_info.interface:
+            for ns in i.namespace_set.ns:
+                try:
+                    yield lib.get_class(ns.name, i.name)
+                except ClassNotFounderror:
+                    pass
+                else:
+                    break
+            else:
+                raise ClassNotFounderror(i)
+
     def get_method_trait(self, name, raw_trait=False, ignore_ns=False):
         for t in self.class_info.instance_info.trait:
             if isinstance(t.data, abc.TraitMethod) \

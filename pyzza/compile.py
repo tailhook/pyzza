@@ -120,6 +120,9 @@ class CodeHeader:
         inst.super_name = bases[0].name if bases else abc.AnyType()
         inst.flags = 0
         inst.interface = [i.name for i in implements]
+        all_implements = implements[:]
+        for i in all_implements:
+            all_implements.extend(i.get_interfaces())
         inst.iinit = frag.namespace['__init__'].code_fragment._method_info
         traits = []
         for (k, m) in frag.namespace.items():
@@ -134,7 +137,7 @@ class CodeHeader:
                         flag = abc.TraitsInfo.ATTR_Override
                         disp_id = basetrait.disp_id
                         break
-                for i in implements:
+                for i in all_implements:
                     baset = i.get_method_trait(fullname,
                         ignore_ns=True, raw_trait=True)
                     if baset is None:
