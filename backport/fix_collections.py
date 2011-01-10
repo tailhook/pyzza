@@ -1,4 +1,5 @@
 
+import sys
 from lib2to3 import fixer_base, pytree, patcomp
 from lib2to3.pgen2 import token
 from lib2to3.fixer_util import LParen, RParen, Comma
@@ -17,5 +18,6 @@ class FixCollections(fixer_base.BaseFix):
     """
 
     def transform(self, node, results):
-        results['modulename'].value = '.collections'
+        if sys.version_info < (2, 7):
+            results['modulename'].value = '.collections'
         return node

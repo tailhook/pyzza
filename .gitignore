@@ -4,3 +4,4 @@ Cookfile.dep
 /MANIFEST
 /dist
 /test/testpy.swf
+/build
