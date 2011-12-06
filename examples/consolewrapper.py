@@ -4,12 +4,13 @@ from flash.net import URLRequest
 from flash.events import Event
 from flash.system import ApplicationDomain, SecurityDomain, LoaderContext
 from string import repr
+from flash.system import Security
 
 @package('console')
 class Main(Sprite):
     def __init__(self):
-        self.stage.align = StageAlign.TOP_LEFT
-        self.stage.scaleMode = StageScaleMode.NO_SCALE
+        Security.allowDomain('trypyzza.gafol.net')
+
         wurl = None
         newparams = {}
         for k, v in items(self.loaderInfo.parameters):
@@ -18,22 +19,38 @@ class Main(Sprite):
             else:
                 newparams[k] = v
         self.params = newparams
+        if wurl:
+            # wrapping an swf
+            self.activate(self)
+            Log.info("Loading url " + repr(wurl))
+            self.load(wurl)
+        elif not self.stage:
+            # loaded using preloadswf
+            self.addEventListener('allComplete', self._swf_loaded)
+        else:
+            # run standalone (can load internals yourself)
+            self.activate(self)
+
+    def _swf_loaded(self, event):
+        self.activate(event.target.content)
+
+    def activate(self, cont):
+        cont.stage.align = StageAlign.TOP_LEFT
+        cont.stage.scaleMode = StageScaleMode.NO_SCALE
         self.namespace = {
             'load': self.load,
-            'params': newparams,
+            'params': self.params,
             'unload': self.unload,
-            'root': self.get_root,
+            'root': cont,
             '_root': self,
             'print': self.print,
             'repr': repr,
             'locals': self.print_namespace,
+            'stage': cont.stage,
             }
-        self.console = Console(self, Evaluator(self.namespace))
+        self.console = Console(cont, Evaluator(self.namespace))
         self.namespace.console = self.console
         Log.add_handler(self.console)
-        if wurl:
-            Log.info("Loading url " + repr(wurl))
-            self.load(wurl)
 
     def load(self, url):
         if self.child:
